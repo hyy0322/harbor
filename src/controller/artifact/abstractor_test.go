@@ -15,16 +15,19 @@
 package artifact
 
 import (
-	"github.com/docker/distribution"
-	"github.com/docker/distribution/manifest/schema1"
-	"github.com/docker/distribution/manifest/schema2"
+	"context"
+	"testing"
+
 	"github.com/goharbor/harbor/src/controller/artifact/processor"
 	"github.com/goharbor/harbor/src/pkg/artifact"
 	tart "github.com/goharbor/harbor/src/testing/pkg/artifact"
 	"github.com/goharbor/harbor/src/testing/pkg/registry"
+
+	"github.com/docker/distribution"
+	"github.com/docker/distribution/manifest/schema1"
+	"github.com/docker/distribution/manifest/schema2"
 	v1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/suite"
-	"testing"
 )
 
 var (
@@ -198,6 +201,21 @@ var (
 }`
 )
 
+type fakeProcessor struct{}
+
+func (f *fakeProcessor) GetArtifactType(ctx context.Context, artifact *artifact.Artifact) string {
+	return ""
+}
+func (f *fakeProcessor) ListAdditionTypes(ctx context.Context, artifact *artifact.Artifact) []string {
+	return nil
+}
+func (f *fakeProcessor) AbstractMetadata(ctx context.Context, artifact *artifact.Artifact, manifest []byte) error {
+	return nil
+}
+func (f *fakeProcessor) AbstractAddition(ctx context.Context, artifact *artifact.Artifact, additionType string) (*processor.Addition, error) {
+	return nil, nil
+}
+
 type abstractorTestSuite struct {
 	suite.Suite
 	argMgr     *tart.FakeManager
@@ -214,6 +232,7 @@ func (a *abstractorTestSuite) SetupTest() {
 	}
 	// clear all registered processors
 	processor.Registry = map[string]processor.Processor{}
+	processor.Registry[schema2.MediaTypeImageConfig] = &fakeProcessor{}
 }
 
 // docker manifest v1

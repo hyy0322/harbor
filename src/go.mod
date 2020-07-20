@@ -51,6 +51,7 @@ require (
 	github.com/lib/pq v1.3.0
 	github.com/mattn/go-runewidth v0.0.4 // indirect
 	github.com/miekg/pkcs11 v0.0.0-20170220202408-7283ca79f35e // indirect
+	github.com/mitchellh/mapstructure v1.1.2
 	github.com/ncw/swift v1.0.49 // indirect
 	github.com/olekukonko/tablewriter v0.0.1
 	github.com/opencontainers/go-digest v1.0.0-rc1
