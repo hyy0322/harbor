@@ -18,18 +18,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"regexp"
 	"strings"
 
-	schemaV1 "github.com/goharbor/harbor/src/controller/artifact/schema/v1"
+	"github.com/goharbor/harbor/src/controller/artifact/schema"
+	schemav1alpha "github.com/goharbor/harbor/src/controller/artifact/schema/v1alpha"
 	"github.com/goharbor/harbor/src/lib/errors"
 	"github.com/goharbor/harbor/src/lib/log"
 	"github.com/goharbor/harbor/src/pkg/artifact"
 	"github.com/goharbor/harbor/src/pkg/registry"
 
 	"github.com/docker/distribution/manifest/schema2"
-	"github.com/mitchellh/mapstructure"
 	v1 "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
@@ -59,23 +58,40 @@ func (d *defaultProcessor) GetArtifactType(ctx context.Context, artifact *artifa
 	return ArtifactTypeUnknown
 }
 func (d *defaultProcessor) ListAdditionTypes(ctx context.Context, artifact *artifact.Artifact) []string {
-	artifactConfig := artifact.ExtraAttrs
-	schemaMap, ok := artifactConfig[schemaV1.XHarborAttributes]
-	if !ok {
-		return nil
-	}
-	schema := &schemaV1.Schema{}
-	err := mapstructure.Decode(schemaMap, schema)
-	if err != nil {
-		log.Warningf("unsupported artifact config schema: %v", err)
-		return nil
-	}
-	additionTypes := make([]string, 0)
-	for _, addition := range schema.Additions {
-		additionTypes = append(additionTypes, addition.Name)
-	}
-	return additionTypes
+	return nil
 }
+
+// The default processor will process user-defined artifact.
+// AbstractMetadata will abstract data in a specific way.
+// Annotation keys in artifact annotation will decide which content will be processed in artifact.
+// Here is a manifest example:
+//{
+//   "schemaVersion": 2,
+//   "config": {
+//       "mediaType": "application/vnd.caicloud.model.config.v1alpha1+json",
+//       "digest": "sha256:be948daf0e22f264ea70b713ea0db35050ae659c185706aa2fad74834455fe8c",
+//       "size": 187,
+//       "annotations": {
+//           "org.goharbor.artifact.schema.version": "v1/alpha",
+//           "org.goharbor.artifact.skiplist": "metrics,git"
+//       }
+//   },
+//   "layers": [
+//       {
+//           "mediaType": "image/png",
+//           "digest": "sha256:d923b93eadde0af5c639a972710a4d919066aba5d0dfbf4b9385099f70272da0",
+//           "size": 166015,
+//           "annotations": {
+//               "org.goharbor.artifact.icon": "true"
+//           }
+//       },
+//       {
+//           "mediaType": "application/tar+gzip",
+//           "digest": "sha256:d923b93eadde0af5c639a972710a4d919066aba5d0dfbf4b9385099f70272da0",
+//           "size": 166015
+//       }
+//   ]
+//}
 func (d *defaultProcessor) AbstractMetadata(ctx context.Context, artifact *artifact.Artifact, manifest []byte) error {
 	if artifact.ManifestMediaType != v1.MediaTypeImageManifest && artifact.ManifestMediaType != schema2.MediaTypeManifest {
 		return nil
@@ -83,10 +99,9 @@ func (d *defaultProcessor) AbstractMetadata(ctx context.Context, artifact *artif
 	// get manifest
 	mani := &v1.Manifest{}
 	if err := json.Unmarshal(manifest, mani); err != nil {
-		log.Infof("%v", mani)
-		log.Warningf("unmarshal error: %+v", err)
 		return err
 	}
+
 	// get config layer
 	_, blob, err := d.RegCli.PullBlob(artifact.RepositoryName, mani.Config.Digest.String())
 	if err != nil {
@@ -94,6 +109,7 @@ func (d *defaultProcessor) AbstractMetadata(ctx context.Context, artifact *artif
 		return err
 	}
 	defer blob.Close()
+
 	// parse metadata from config layer
 	metadata := map[string]interface{}{}
 	if err := json.NewDecoder(blob).Decode(&metadata); err != nil {
@@ -101,29 +117,31 @@ func (d *defaultProcessor) AbstractMetadata(ctx context.Context, artifact *artif
 		return err
 	}
 
-	// populate all metadata into the ExtraAttrs first
-	// if there are xHarborAttribute in artifact config
-	// metadata will be processed in specific rules
+	// Populate all metadata into the ExtraAttrs first.
+	// If there are annotation key AnnotationArtifactSchemaVersion in artifact manifest.config, metadata will be processed in specific rules.
 	artifact.ExtraAttrs = metadata
 
-	// parse schema
-	schemaMap, ok := metadata[schemaV1.XHarborAttributes]
+	// check manifest.config.annotation key AnnotationArtifactSchemaVersion
+	schemaVersion, ok := mani.Config.Annotations[schema.AnnotationArtifactSchemaVersion]
 	if !ok {
 		return nil
 	}
-	schema := &schemaV1.Schema{}
-	err = mapstructure.Decode(schemaMap, schema)
-	if err != nil {
-		return fmt.Errorf("unsupported artifact config schema: %v", err)
-	}
 
 	// check schema version
-	if schema.SchemaVersion != schemaV1.SchemaVersionV1 {
-		return fmt.Errorf("unsupported artifact config schema version %d", schema.SchemaVersion)
+	if schemaVersion != schema.SchemaVersionV1Alpha {
+		return fmt.Errorf("unsupported artifact config schema version %s", schemaVersion)
 	}
 
+	// check manifest.config.annotation key AnnotationArtifactSkipList
+	skipKeyListStr, ok := mani.Config.Annotations[schemav1alpha.AnnotationArtifactSkipList]
+	if !ok {
+		return nil
+	}
+
+	skipKeyList := strings.Split(skipKeyListStr, ",")
+
 	// move keys in skipKeyList
-	for _, skipKey := range schema.SkipKeyList {
+	for _, skipKey := range skipKeyList {
 		delete(metadata, skipKey)
 	}
 
@@ -132,51 +150,9 @@ func (d *defaultProcessor) AbstractMetadata(ctx context.Context, artifact *artif
 	return nil
 }
 func (d *defaultProcessor) AbstractAddition(ctx context.Context, artifact *artifact.Artifact, addition string) (*Addition, error) {
-	// no xHarborAttributes in artifact extraAttrs
-	schemaMap, ok := artifact.ExtraAttrs[schemaV1.XHarborAttributes]
-	if !ok {
-		return nil, errors.New(nil).WithCode(errors.BadRequestCode).
-			WithMessage("no addition defined in config layer for artifact %s, cannot get the addition", artifact.Type)
-	}
-
-	schema := &schemaV1.Schema{}
-	err := mapstructure.Decode(schemaMap, schema)
-	if err != nil {
-		return nil, errors.New(nil).WithCode(errors.BadRequestCode).
-			WithMessage("addition %s isn't supported for %s", addition, artifact.Type)
-	}
-
-	var (
-		contentType string
-		layerDigest string
-	)
-
-	// get addition
-	for _, add := range schema.Additions {
-		if add.Name == addition {
-			contentType = add.ContentType
-			layerDigest = add.Digest
-		}
-	}
-
-	if layerDigest == "" {
-		return nil, errors.New(nil).WithCode(errors.BadRequestCode).
-			WithMessage("addition %s isn't supported for %s", addition, artifact.Type)
-	}
-
-	// get addition from layer
-	_, blob, err := d.RegCli.PullBlob(artifact.RepositoryName, layerDigest)
-	if err != nil {
-		return nil, err
-	}
-	content, err := ioutil.ReadAll(blob)
-	if err != nil {
-		return nil, err
-	}
-	defer blob.Close()
-
-	return &Addition{
-		Content:     content,
-		ContentType: contentType,
-	}, nil
+	// In schema version v1/alpha, addition not support for user-defined artifact yet.
+	// It will be support in the future
+	// return error directly
+	return nil, errors.New(nil).WithCode(errors.BadRequestCode).
+		WithMessage("the processor for artifact %s not found, cannot get the addition", artifact.Type)
 }
