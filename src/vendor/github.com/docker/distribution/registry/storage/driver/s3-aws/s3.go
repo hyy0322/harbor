@@ -19,6 +19,7 @@ import (
 	"io"
 	"io/ioutil"
 	"math"
+	"net"
 	"net/http"
 	"reflect"
 	"sort"
@@ -423,7 +424,6 @@ func New(params DriverParameters) (*Driver, error) {
 	})
 
 	if params.RegionEndpoint != "" {
-		awsConfig.WithS3ForcePathStyle(true)
 		awsConfig.WithEndpoint(params.RegionEndpoint)
 	}
 
@@ -549,9 +549,9 @@ func (d *driver) Reader(ctx context.Context, path string, offset int64) (io.Read
 
 // Writer returns a FileWriter which will store the content written to it
 // at the location designated by "path" after the call to Commit.
-func (d *driver) Writer(ctx context.Context, path string, append bool) (storagedriver.FileWriter, error) {
+func (d *driver) Writer(ctx context.Context, path string, appendParam bool) (storagedriver.FileWriter, error) {
 	key := d.s3Path(path)
-	if !append {
+	if !appendParam {
 		// TODO (brianbland): cancel other uploads at this path
 		resp, err := d.S3.CreateMultipartUpload(&s3.CreateMultipartUploadInput{
 			Bucket:               aws.String(d.Bucket),
@@ -574,7 +574,7 @@ func (d *driver) Writer(ctx context.Context, path string, append bool) (storaged
 	if err != nil {
 		return nil, parseError(path, err)
 	}
-
+	var allParts []*s3.Part
 	for _, multi := range resp.Uploads {
 		if key != *multi.Key {
 			continue
@@ -587,11 +587,20 @@ func (d *driver) Writer(ctx context.Context, path string, append bool) (storaged
 		if err != nil {
 			return nil, parseError(path, err)
 		}
-		var multiSize int64
-		for _, part := range resp.Parts {
-			multiSize += *part.Size
+		allParts = append(allParts, resp.Parts...)
+		for *resp.IsTruncated {
+			resp, err = d.S3.ListParts(&s3.ListPartsInput{
+				Bucket:           aws.String(d.Bucket),
+				Key:              aws.String(key),
+				UploadId:         multi.UploadId,
+				PartNumberMarker: resp.NextPartNumberMarker,
+			})
+			if err != nil {
+				return nil, parseError(path, err)
+			}
+			allParts = append(allParts, resp.Parts...)
 		}
-		return d.newWriter(key, *multi.UploadId, resp.Parts), nil
+		return d.newWriter(key, *multi.UploadId, allParts), nil
 	}
 	return nil, storagedriver.PathNotFoundError{Path: path}
 }
@@ -899,7 +908,64 @@ func (d *driver) URLFor(ctx context.Context, path string, options map[string]int
 		panic("unreachable")
 	}
 
+	domain := options["domain"].(string)
+	realIPs := options["realIPs"].(string)
+	req.HTTPRequest.URL.Host = GetTosEndpoint(ctx, domain, realIPs, req.HTTPRequest.URL.Host)
+
 	return req.Presign(expiresIn)
+}
+
+// GetTosEndpoint ...
+// registry s3 endpoint 填 ivolces vpc 域名
+func GetTosEndpoint(ctx context.Context, domain, realIPs, redirectURL string) string {
+	dcontext.GetLogger(ctx).Infof("request domain: %s, X-Real-Ip: %s", domain, realIPs)
+	// 访问的是公共服务区域名
+	if strings.HasSuffix(domain, "cr.ivolces.com") {
+		if strings.Contains(redirectURL, "inner") {
+			dcontext.GetLogger(ctx).Info("request from internal zone")
+			return redirectURL
+		}
+		redirectURLPrefix := strings.TrimSuffix(redirectURL, ".ivolces.com")
+		dcontext.GetLogger(ctx).Info("request from internal zone")
+		return fmt.Sprintf("%s-inner.ivolces.com", redirectURLPrefix)
+	}
+	// 访问的是 公网 或 vpc 域名
+	// 访问的是 vpc 域名
+	realIPsSplit := strings.Split(realIPs, ",")
+	if len(realIPsSplit) == 0 {
+		dcontext.GetLogger(ctx).Info("request from vpc zone")
+		return redirectURL
+	}
+	fromVpc := checkIP(realIPsSplit[0])
+	dcontext.GetLogger(ctx).Infof("X-Real-Ip: %s, fromVpc: %v", realIPsSplit[0], fromVpc)
+	if fromVpc {
+		dcontext.GetLogger(ctx).Info("request from vpc zone")
+		return redirectURL
+	}
+	// 默认返回 tos 公网地址
+	redirectURLPrefix := strings.TrimSuffix(redirectURL, ".ivolces.com")
+	dcontext.GetLogger(ctx).Info("request from public zone")
+	return fmt.Sprintf("%s.volces.com", redirectURLPrefix)
+}
+
+func checkIP(ipStr string) bool {
+	ip := net.ParseIP(ipStr)
+	if ip == nil {
+		return true
+	}
+	cidrs := []string{
+		"10.0.0.0/8",
+		"172.16.0.0/12",
+		"192.168.0.0/16",
+		"100.64.0.0/10",
+	}
+	for _, cidr := range cidrs {
+		_, ipNet, _ := net.ParseCIDR(cidr)
+		if ipNet.Contains(ip) {
+			return true
+		}
+	}
+	return false
 }
 
 // Walk traverses a filesystem defined within driver, starting
@@ -971,9 +1037,12 @@ func (d *driver) doWalk(parentCtx context.Context, objectCount *int64, path, pre
 	listObjectErr := d.S3.ListObjectsV2PagesWithContext(ctx, listObjectsInput, func(objects *s3.ListObjectsV2Output, lastPage bool) bool {
 
 		var count int64
+<<<<<<< HEAD
 		// KeyCount was introduced with version 2 of the GET Bucket operation in S3.
 		// Some S3 implementations don't support V2 now, so we fall back to manual
 		// calculation of the key count if required
+=======
+>>>>>>> fdc7c8828 (chore: upgrade distribution)
 		if objects.KeyCount != nil {
 			count = *objects.KeyCount
 			*objectCount += *objects.KeyCount
