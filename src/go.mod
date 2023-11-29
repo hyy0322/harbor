@@ -5,19 +5,17 @@ go 1.17
 require (
 	github.com/FZambia/sentinel v1.1.0
 	github.com/Masterminds/semver v1.5.0
-	github.com/Shopify/logrus-bugsnag v0.0.0-20171204204709-577dee27f20d // indirect
 	github.com/aliyun/alibaba-cloud-sdk-go v0.0.0-20190726115642-cd293c93fd97
 	github.com/asaskevich/govalidator v0.0.0-20210307081110-f21760c49a8d
 	github.com/aws/aws-sdk-go v1.34.28
 	github.com/beego/i18n v0.0.0-20140604031826-e87155e8f0c0
-	github.com/bitly/go-simplejson v0.5.0 // indirect
 	github.com/bmatcuk/doublestar v1.1.1
 	github.com/casbin/casbin v1.7.0
 	github.com/cenkalti/backoff/v4 v4.1.1
 	github.com/coreos/go-oidc/v3 v3.0.0
 	github.com/dghubble/sling v1.1.0
-	github.com/docker/distribution v2.8.0+incompatible
 	github.com/dnaeon/go-vcr v1.2.0 // indirect
+	github.com/docker/distribution v2.8.0+incompatible
 	github.com/docker/libtrust v0.0.0-20160708172513-aabc10ec26b7
 	github.com/ghodss/yaml v1.0.0
 	github.com/go-asn1-ber/asn1-ber v1.5.1
@@ -209,7 +207,6 @@ require (
 	google.golang.org/genproto v0.0.0-20211013025323-ce878158c4d4 // indirect
 	google.golang.org/grpc v1.41.0 // indirect
 	google.golang.org/protobuf v1.27.1 // indirect
-	google.golang.org/cloud v0.0.0-00010101000000-000000000000 // indirect
 	gopkg.in/dancannon/gorethink.v3 v3.0.5 // indirect
 	gopkg.in/fatih/pool.v2 v2.0.0 // indirect
 	gopkg.in/gorethink/gorethink.v3 v3.0.5 // indirect
@@ -233,7 +230,7 @@ require github.com/hashicorp/golang-lru v0.5.4 // indirect
 
 replace (
 	github.com/Azure/go-autorest => github.com/Azure/go-autorest v14.2.0+incompatible
-	github.com/docker/distribution => code.byted.org/infcp/cr-distribution v2.5.3-cr-v2.3.0+incompatible
+	github.com/docker/distribution => code.byted.org/infcp/cr-distribution v2.5.3-cr-v2.13.0+incompatible
 	github.com/goharbor/harbor => ../
 	google.golang.org/api => google.golang.org/api v0.0.0-20160322025152-9bf6e6e569ff
 	google.golang.org/cloud => cloud.google.com/go v0.0.0-20151119220103-975617b05ea8

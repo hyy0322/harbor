@@ -1,0 +1,60 @@
+#!/bin/bash
+
+set +e
+
+if [ -z $1 ]; then
+  error "Please set the 'version' variable"
+  exit 1
+fi
+
+VERSION="$1"
+
+set -e
+
+## the temp folder to store binary file...
+#mkdir -p binary
+#rm -rf binary/registry || true
+#
+#cd `dirname $0`
+#cur=$PWD
+
+SRC_PATH=/registry/src/github.com/docker/distribution
+SCRIPT_PATH=/registry
+
+# the temp folder to store distribution source code...
+#TEMP=`mktemp -d ${TMPDIR-/tmp}/distribution.XXXXXX`
+# git clone -b $VERSION https://github.com/distribution/distribution.git ${SRC_PATH}
+git clone -b $VERSION https://code.byted.org/infcp/cr-distribution.git ${SRC_PATH}
+
+cd ${SRC_PATH}
+# # add patch 2879
+# echo 'add patch https://github.com/distribution/distribution/pull/2879 ...'
+# wget https://github.com/distribution/distribution/pull/2879.patch
+# git apply 2879.patch
+
+# # add patch 3370
+# echo 'add patch https://github.com/distribution/distribution/pull/3370 ...'
+# wget https://github.com/distribution/distribution/pull/3370.patch
+# git apply 3370.patch
+
+# # add patch redis
+# git apply ${SCRIPT_PATH}/redis.patch
+
+# # for new golang version, go module should be closed
+export GOPATH=${SCRIPT_PATH}
+go env -w GO111MODULE=off
+
+echo 'build the registry binary ...'
+CGO_ENABLED=0 make PREFIX=/go clean binaries
+
+#echo 'copy the registry binary to local...'
+#ID=$(docker create registry-golang)
+#docker cp $ID:/go/src/github.com/docker/distribution/bin/registry binary/registry
+
+#docker rm -f $ID
+#docker rmi -f registry-golang
+
+#echo "Build registry binary success, then to build photon image..."
+#cd $cur
+#cp $TEMP/cmd/registry/config-example.yml config.yml
+#rm -rf $TEMP

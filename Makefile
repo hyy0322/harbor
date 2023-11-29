@@ -158,7 +158,8 @@ GOTEST=$(GOCMD) test
 GODEP=$(GOTEST) -i
 GOFMT=gofmt -w
 GOBUILDIMAGE=golang:1.17.13
-GOBUILDPATHINCONTAINER=/harbor
+# we should set workdir in dockerfile
+GOBUILDPATHINCONTAINER=.
 
 # go build
 PKG_PATH=github.com/goharbor/harbor/src/pkg
@@ -173,7 +174,7 @@ ifneq ($(GOBUILDLDFLAGS),)
 endif
 
 # go build command
-GOIMAGEBUILDCMD=/usr/local/go/bin/go build -mod vendor
+GOIMAGEBUILDCMD=go build -mod vendor
 GOIMAGEBUILD_COMMON=$(GOIMAGEBUILDCMD) $(GOFLAGS) ${GOTAGS} ${GOLDFLAGS}
 GOIMAGEBUILD_CORE=$(GOIMAGEBUILDCMD) $(GOFLAGS) ${GOTAGS} --ldflags "-w -s $(CORE_LDFLAGS)"
 
@@ -385,6 +386,12 @@ compile_registryctl:
 	@echo "compiling binary for harbor registry controller (golang image)..."
 	@$(DOCKERCMD) run --rm -v $(BUILDPATH):$(GOBUILDPATHINCONTAINER) -w $(GOBUILDPATH_REGISTRYCTL) $(GOBUILDIMAGE) $(GOIMAGEBUILD_COMMON) -o $(GOBUILDPATHINCONTAINER)/$(GOBUILDMAKEPATH_REGISTRYCTL)/$(REGISTRYCTLBINARYNAME)
 	@echo "Done."
+
+compile_registryctl_binary:
+	@echo "compiling binary for harbor registry controller (golang image)..."
+	cd $(GOBUILDPATH_REGISTRYCTL); $(GOIMAGEBUILD_COMMON)  -o $(REGISTRYCTLBINARYPATH)/$(REGISTRYCTLBINARYNAME)
+	@echo "Done."
+
 
 compile_notary_migrate_patch:
 	@echo "compiling binary for migrate patch (golang image)..."
