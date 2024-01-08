@@ -36,6 +36,7 @@ type Resource struct {
 	Tag          string                 `json:"tag,omitempty"`
 	ResourceURL  string                 `json:"resource_url,omitempty"`
 	ScanOverview map[string]interface{} `json:"scan_overview,omitempty"`
+	Type         string                 `json:"type,omitempty"`
 }
 
 // Repository info of notification event

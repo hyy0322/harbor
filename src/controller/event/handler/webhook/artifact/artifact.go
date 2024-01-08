@@ -142,6 +142,7 @@ func (a *Handler) constructArtifactPayload(event *event.ArtifactEvent, project *
 		Tag:         reference,
 		Digest:      event.Artifact.Digest,
 		ResourceURL: resURL,
+		Type:        event.Artifact.Type,
 	}
 	payload.EventData.Resources = append(payload.EventData.Resources, resource)
 

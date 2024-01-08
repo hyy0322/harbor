@@ -159,7 +159,7 @@ GODEP=$(GOTEST) -i
 GOFMT=gofmt -w
 GOBUILDIMAGE=golang:1.17.13
 # we should set workdir in dockerfile
-GOBUILDPATHINCONTAINER=.
+GOBUILDPATHINCONTAINER=/harbor
 
 # go build
 PKG_PATH=github.com/goharbor/harbor/src/pkg
