@@ -7571,7 +7571,7 @@ definitions:
         x-omitempty: false
       auth:
         type: string
-        default: ""
+        default:
         description: |
           Specify what authentication approach is adopted for the HTTP communications.
           Supported types Basic", "Bearer" and api key header "X-ScannerAdapter-API-Key"
@@ -7615,7 +7615,7 @@ definitions:
         example: "1.0.1"
       health:
         type: string
-        default: ""
+        default:
         description: Indicate the healthy of the registration
         example: "healthy"
 
@@ -7680,7 +7680,7 @@ definitions:
         example: http://harbor-scanner-trivy:8080
       auth:
         type: string
-        default: ""
+        default:
         description: |
           Specify what authentication approach is adopted for the HTTP communications.
           Supported types Basic", "Bearer" and api key header "X-ScannerAdapter-API-Key"
