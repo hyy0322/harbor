@@ -92,8 +92,7 @@ func (rc *reqChecker) projectID(ctx context.Context, name string) (int64, error)
 
 func getChallenge(req *http.Request, accessList []access) string {
 	logger := log.G(req.Context())
-	auth := req.Header.Get(authHeader)
-	if len(auth) > 0 || lib.V2CatalogURLRe.MatchString(req.URL.Path) {
+	if lib.V2CatalogURLRe.MatchString(req.URL.Path) {
 		// Return basic auth challenge by default, incl. request to '/v2/_catalog'
 		return `Basic realm="harbor"`
 	}
@@ -114,6 +113,8 @@ func getChallenge(req *http.Request, accessList []access) string {
 	if len(scope) > 0 {
 		challenge = fmt.Sprintf(`%s,scope="%s"`, challenge, scope)
 	}
+	// adapt contained;see https://datatracker.ietf.org/doc/html/rfc6750#section-3
+	challenge = fmt.Sprintf(`%s,error="%s"`, challenge, "invalid_token")
 	return challenge
 }
 
