@@ -59,7 +59,7 @@ func New() Manager {
 
 const projectNameMaxLen int = 255
 const projectNameMinLen int = 1
-const restrictedNameChars = `[a-z0-9]+(?:[._-][a-z0-9]+)*`
+const restrictedNameChars = `[a-z0-9]+(?:(?:[._]|__|[-]*)[a-z0-9]+)*`
 
 var (
 	validProjectName = regexp.MustCompile(`^` + restrictedNameChars + `$`)
