@@ -36,8 +36,8 @@ cloud.google.com/go/storage v1.5.0/go.mod h1:tpKbwo567HUNpVclU5sGELwQWBDZ8gh0Zeo
 cloud.google.com/go/storage v1.6.0/go.mod h1:N7U0C8pVQ/+NIKOBQyamJIeKQKkZ+mxpohlUTyfDhBk=
 cloud.google.com/go/storage v1.8.0/go.mod h1:Wv1Oy7z6Yz3DshWRJFhqM/UCfaWIRTdp0RXyy7KQOVs=
 cloud.google.com/go/storage v1.10.0/go.mod h1:FLPqc6j+Ki4BU591ie1oL6qBQGu2Bl/tZ9ullr3+Kg0=
-code.byted.org/infcp/cr-distribution v2.5.3-cr-v2.13.0+incompatible h1:6qts6DbZqm8zcKeUgxEf5Jtva76wGqDPdlhO99qiutE=
-code.byted.org/infcp/cr-distribution v2.5.3-cr-v2.13.0+incompatible/go.mod h1:8fr0nSNQgpfY3z10aTkJsYm/SDloKzckfv9c3PQb3xU=
+code.byted.org/infcp/cr-distribution v2.5.3-cr-v2.13.0.0.20240809072603-75ed58455f1c+incompatible h1:18gRMFpOZXlMx/7cDfSYe+crjyPFfXZ/bJk3Gxyca5E=
+code.byted.org/infcp/cr-distribution v2.5.3-cr-v2.13.0.0.20240809072603-75ed58455f1c+incompatible/go.mod h1:8fr0nSNQgpfY3z10aTkJsYm/SDloKzckfv9c3PQb3xU=
 dmitri.shuralyov.com/gpu/mtl v0.0.0-20190408044501-666a987793e9/go.mod h1:H6x//7gZCb22OMCxBHrMx7a5I7Hp++hsVxbQ4BYO7hU=
 gioui.org v0.0.0-20210308172011-57750fc8a0a6/go.mod h1:RSH6KIUZ0p2xy5zHDxgAM4zumjgTw83q2ge/PI+yyw8=
 github.com/Azure/azure-pipeline-go v0.2.3/go.mod h1:x841ezTBIMG6O3lAcl8ATHnsOPVl2bqk7S3ta6S6u4k=

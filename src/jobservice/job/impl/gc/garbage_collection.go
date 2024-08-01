@@ -15,7 +15,9 @@
 package gc
 
 import (
+	"context"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/goharbor/harbor/src/common/registryctl"
@@ -209,9 +211,12 @@ func (gc *GarbageCollector) mark(ctx job.Context) error {
 	mfCt := 0
 	makeSize := int64(0)
 	for _, blob := range blobs {
+		sysCtx := context.WithValue(ctx.SystemContext(), "instance", blob.Instance)
+
 		if !gc.dryRun {
 			blob.Status = blobModels.StatusDelete
-			count, err := gc.blobMgr.UpdateBlobStatus(ctx.SystemContext(), blob)
+			// TODO(pc): probably should think how to modify this method, use instance in blob or pass in via context?
+			count, err := gc.blobMgr.UpdateBlobStatus(sysCtx, blob)
 			if err != nil {
 				gc.logger.Warningf("failed to mark gc candidate, skip it.: %s, error: %v", blob.Digest, err)
 				continue
@@ -245,10 +250,11 @@ func (gc *GarbageCollector) sweep(ctx job.Context) error {
 	mfCnt := 0
 	total := len(gc.deleteSet)
 	for i, blob := range gc.deleteSet {
+		sysCtx := context.WithValue(ctx.SystemContext(), "instance", blob.Instance)
 		idx := i + 1
 		// set the status firstly, if the blob is updated by any HEAD/PUT request, it should be fail and skip.
 		blob.Status = blobModels.StatusDeleting
-		count, err := gc.blobMgr.UpdateBlobStatus(ctx.SystemContext(), blob)
+		count, err := gc.blobMgr.UpdateBlobStatus(sysCtx, blob)
 		if err != nil {
 			gc.logger.Errorf("[%d/%d] failed to mark gc candidate deleting, skip: %s, %s", idx, total, blob.Digest, blob.Status)
 			continue
@@ -272,6 +278,7 @@ func (gc *GarbageCollector) sweep(ctx job.Context) error {
 					}); err != nil {
 						gc.logger.Errorf("[%d/%d] failed to call gc.markDeleteFailed() after v2DeleteManifest() error out: %s, %v", idx, total, blob.Digest, err)
 						return err
+
 					}
 					skippedBlob = true
 					continue
@@ -280,7 +287,7 @@ func (gc *GarbageCollector) sweep(ctx job.Context) error {
 				gc.logger.Infof("[%d/%d] delete manifest from storage: %s", idx, total, blob.Digest)
 				if err := retry.Retry(func() error {
 					return ignoreNotFound(func() error {
-						return gc.registryCtlClient.DeleteManifest(art.RepositoryName, blob.Digest)
+						return gc.registryCtlClient.DeleteInstanceManifest(blob.Instance, art.RepositoryName, blob.Digest)
 					})
 				}, retry.Callback(func(err error, sleep time.Duration) {
 					gc.logger.Infof("[%d/%d] failed to exec DeleteManifest, error: %v, will retry again after: %s", idx, total, err, sleep)
@@ -298,7 +305,7 @@ func (gc *GarbageCollector) sweep(ctx job.Context) error {
 
 				gc.logger.Infof("[%d/%d] delete artifact trash record from database: %d, %s, %s", idx, total, art.ID, art.RepositoryName, art.Digest)
 				if err := ignoreNotFound(func() error {
-					return gc.artrashMgr.Delete(ctx.SystemContext(), art.ID)
+					return gc.artrashMgr.Delete(sysCtx, art.ID)
 				}); err != nil {
 					gc.logger.Errorf("[%d/%d] failed to call gc.artrashMgr.Delete(): %v, errMsg=%v", idx, total, art.ID, err)
 					return err
@@ -487,6 +494,12 @@ func (gc *GarbageCollector) markOrSweepUntaggedBlobs(ctx job.Context) []*blobMod
 		timeRG := q.Range{
 			Max: time.Now().Add(-time.Duration(gc.timeWindowHours) * time.Hour).Format(time.RFC3339),
 		}
+		parts := strings.Split(p.Name, "__")
+		instance := "0"
+		if len(parts) >= 2 {
+			instance = parts[0]
+		}
+		sysCtx := context.WithValue(ctx.SystemContext(), "instance", instance)
 
 		for {
 			blobRG := q.Range{
@@ -504,20 +517,28 @@ func (gc *GarbageCollector) markOrSweepUntaggedBlobs(ctx job.Context) []*blobMod
 					q.NewSort("id", false),
 				},
 			}
-			blobs, err := gc.blobMgr.List(ctx.SystemContext(), query)
+			// TODO(pc):
+			// 1. List is buggy, the blob manager list does not support query with project ID
+			// 2. Make the following code instanced. Since this method sweeps blobs by project
+			//    simply get instance id from project name or add column to project table and set it to the context.
+			//    If it is not instanced, the code will probably work as well: FindBlobsShouldUnassociatedWithProject
+			//    will find blobs from other instance with the same digest. However project_blob table records the blob id
+			//    instead of blob digest, and CleanupAssociationsForProject use blob id to remove blobs that should be
+			//    unassociated from the project. So blobs from the wrong instance will not match any row in project_blob table
+			blobs, err := gc.blobMgr.List(sysCtx, query)
 			if err != nil {
 				gc.logger.Errorf("failed to get blobs of project: %d, %v", p.ProjectID, err)
 				break
 			}
 			if gc.dryRun {
-				unassociated, err := gc.blobMgr.FindBlobsShouldUnassociatedWithProject(ctx.SystemContext(), p.ProjectID, blobs)
+				unassociated, err := gc.blobMgr.FindBlobsShouldUnassociatedWithProject(sysCtx, p.ProjectID, blobs)
 				if err != nil {
 					gc.logger.Errorf("failed to find untagged blobs of project: %d, %v", p.ProjectID, err)
 					break
 				}
 				orphanBlobs = append(orphanBlobs, unassociated...)
 			} else {
-				if err := gc.blobMgr.CleanupAssociationsForProject(ctx.SystemContext(), p.ProjectID, blobs); err != nil {
+				if err := gc.blobMgr.CleanupAssociationsForProject(sysCtx, p.ProjectID, blobs); err != nil {
 					gc.logger.Errorf("failed to clean untagged blobs of project: %d, %v", p.ProjectID, err)
 					break
 				}
@@ -535,6 +556,9 @@ func (gc *GarbageCollector) uselessBlobs(ctx job.Context) ([]*blobModels.Blob, e
 	var blobs []*blobModels.Blob
 	var err error
 
+	// Note(pc): UselessBlobs does not need rework for multi instance, since the project_blob table
+	//           row records project id to blob **id** relationship. blob in different instance has
+	//           are different rows in the table, hence unique ids. So this method actually works.
 	blobs, err = gc.blobMgr.UselessBlobs(ctx.SystemContext(), gc.timeWindowHours)
 	if err != nil {
 		gc.logger.Errorf("failed to get gc useless blobs: %v", err)
@@ -561,7 +585,8 @@ func (gc *GarbageCollector) uselessBlobs(ctx job.Context) ([]*blobModels.Blob, e
 // markDeleteFailed set the blob status to StatusDeleteFailed
 func (gc *GarbageCollector) markDeleteFailed(ctx job.Context, blob *blobModels.Blob) error {
 	blob.Status = blobModels.StatusDeleteFailed
-	count, err := gc.blobMgr.UpdateBlobStatus(ctx.SystemContext(), blob)
+	sysCtx := context.WithValue(ctx.SystemContext(), "instance", blob.Instance)
+	count, err := gc.blobMgr.UpdateBlobStatus(sysCtx, blob)
 	if err != nil {
 		gc.logger.Errorf("failed to mark gc candidate delete failed: %s, %s", blob.Digest, blob.Status)
 		return errors.Wrapf(err, "failed to mark gc candidate delete failed: %s, %s", blob.Digest, blob.Status)

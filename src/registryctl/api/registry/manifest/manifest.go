@@ -1,6 +1,7 @@
 package manifest
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/goharbor/harbor/src/lib/errors"
@@ -69,6 +70,10 @@ func (h *handler) delete(w http.ResponseWriter, r *http.Request) {
 	}
 	// let the tags as empty here, as it non-blocking GC. The tags deletion will be handled via DELETE /v2/manifest
 	var tags []string
+	instance := mux.Vars(r)["instance"]
+	log.Infof("deleting blob instance: %s, repo: %s, dgst: %s", instance, repoName, dgst)
+	ctx = context.WithValue(ctx, "instance", instance)
+
 	cleaner := storage.NewVacuum(ctx, h.storageDriver)
 	if err := cleaner.RemoveManifest(repoName, dgst, tags); err != nil {
 		tracelib.RecordError(span, err, "failed to remove manifest")

@@ -1,0 +1,906 @@
+From 0b4de484552b402b091f83298c38df6593731582 Mon Sep 17 00:00:00 2001
+From: Pendoragon <tupachydralisk@gmail.com>
+Date: Mon, 1 Jul 2024 15:26:36 +0800
+Subject: [PATCH] multi instance driver filesystem impl
+
+---
+ cmd/registry/config-dev-mul.yml         |  19 ++
+ cmd/registry/main.go                    |   1 +
+ registry/handlers/app.go                |  93 +++--
+ registry/handlers/blobupload.go         |  15 +
+ registry/storage/cache/multi/memory.go  | 199 +++++++++++
+ registry/storage/driver/multi/driver.go | 428 ++++++++++++++++++++++++
+ 6 files changed, 724 insertions(+), 31 deletions(-)
+ create mode 100644 cmd/registry/config-dev-mul.yml
+ create mode 100644 registry/storage/cache/multi/memory.go
+ create mode 100644 registry/storage/driver/multi/driver.go
+
+diff --git a/cmd/registry/config-dev-mul.yml b/cmd/registry/config-dev-mul.yml
+new file mode 100644
+index 00000000..7bad7d5b
+--- /dev/null
++++ b/cmd/registry/config-dev-mul.yml
+@@ -0,0 +1,19 @@
++version: 0.1
++log:
++  level: debug
++  fields:
++    service: registry
++storage:
++  cache:
++    blobdescriptor: multi
++  multi-instance:
++    rootdirectory: /var/lib/registry
++http:
++  addr: :5000
++  headers:
++    X-Content-Type-Options: [nosniff]
++health:
++  storagedriver:
++    enabled: true
++    interval: 10s
++    threshold: 3
+\ No newline at end of file
+diff --git a/cmd/registry/main.go b/cmd/registry/main.go
+index 5beaa563..c978fe60 100644
+--- a/cmd/registry/main.go
++++ b/cmd/registry/main.go
+@@ -14,6 +14,7 @@ import (
+ 	_ "github.com/docker/distribution/registry/storage/driver/inmemory"
+ 	_ "github.com/docker/distribution/registry/storage/driver/middleware/cloudfront"
+ 	_ "github.com/docker/distribution/registry/storage/driver/middleware/redirect"
++	_ "github.com/docker/distribution/registry/storage/driver/multi"
+ 	_ "github.com/docker/distribution/registry/storage/driver/oss"
+ 	_ "github.com/docker/distribution/registry/storage/driver/s3-aws"
+ 	_ "github.com/docker/distribution/registry/storage/driver/swift"
+diff --git a/registry/handlers/app.go b/registry/handlers/app.go
+index 4a7cee9a..e922d8d3 100644
+--- a/registry/handlers/app.go
++++ b/registry/handlers/app.go
+@@ -34,6 +34,7 @@ import (
+ 	"github.com/docker/distribution/registry/proxy"
+ 	"github.com/docker/distribution/registry/storage"
+ 	memorycache "github.com/docker/distribution/registry/storage/cache/memory"
++	multiinstancememcache "github.com/docker/distribution/registry/storage/cache/multi"
+ 	rediscache "github.com/docker/distribution/registry/storage/cache/redis"
+ 	storagedriver "github.com/docker/distribution/registry/storage/driver"
+ 	"github.com/docker/distribution/registry/storage/driver/factory"
+@@ -288,6 +289,15 @@ func NewApp(ctx context.Context, config *configuration.Configuration) *App {
+ 				panic("could not create registry: " + err.Error())
+ 			}
+ 			dcontext.GetLogger(app).Infof("using inmemory blob descriptor cache")
++		case "multi":
++			cacheProvider := multiinstancememcache.NewInMemoryBlobDescriptorCacheProvider()
++			localOptions := append(options, storage.BlobDescriptorCacheProvider(cacheProvider))
++			app.registry, err = storage.NewRegistry(app, app.driver, localOptions...)
++			if err != nil {
++				panic("could not create registry: " + err.Error())
++			}
++			dcontext.GetLogger(app).Infof("using mullti instance inmemory blob descriptor cache")
++
+ 		default:
+ 			if v != "" {
+ 				dcontext.GetLogger(app).Warnf("unknown cache type %q, caching disabled", config.Storage["cache"])
+@@ -360,6 +370,7 @@ func (app *App) RegisterHealthChecks(healthRegistries ...*health.Registry) {
+ 		}
+ 
+ 		storageDriverCheck := func() error {
++			app.Context = context.WithValue(app.Context, "instance", "")
+ 			_, err := app.driver.Stat(app, "/") // "/" should always exist
+ 			if _, ok := err.(storagedriver.PathNotFoundError); ok {
+ 				err = nil // pass this through, backend is responding, but this path doesn't exist.
+@@ -697,84 +708,104 @@ func (app *App) dispatcher(dispatch dispatchFunc) http.Handler {
+ 			}
+ 		}
+ 
+-		context := app.context(w, r)
++		c := app.context(w, r)
+ 
+-		if err := app.authorized(w, r, context); err != nil {
+-			dcontext.GetLogger(context).Warnf("error authorizing context: %v", err)
++		if err := app.authorized(w, r, c); err != nil {
++			dcontext.GetLogger(c).Warnf("error authorizing context: %v", err)
+ 			return
+ 		}
+ 
+ 		// Add username to request logging
+-		context.Context = dcontext.WithLogger(context.Context, dcontext.GetLogger(context.Context, auth.UserNameKey))
++		c.Context = dcontext.WithLogger(c.Context, dcontext.GetLogger(c.Context, auth.UserNameKey))
+ 
+ 		// sync up context on the request.
+-		r = r.WithContext(context)
++		r = r.WithContext(c)
+ 
+ 		if app.nameRequired(r) {
+-			nameRef, err := reference.WithName(getName(context))
++			nameRef, err := reference.WithName(getName(c))
+ 			if err != nil {
+-				dcontext.GetLogger(context).Errorf("error parsing reference from context: %v", err)
+-				context.Errors = append(context.Errors, distribution.ErrRepositoryNameInvalid{
+-					Name:   getName(context),
++				dcontext.GetLogger(c).Errorf("error parsing reference from context: %v", err)
++				c.Errors = append(c.Errors, distribution.ErrRepositoryNameInvalid{
++					Name:   getName(c),
+ 					Reason: err,
+ 				})
+-				if err := errcode.ServeJSON(w, context.Errors); err != nil {
+-					dcontext.GetLogger(context).Errorf("error serving error json: %v (from %v)", err, context.Errors)
++				if err := errcode.ServeJSON(w, c.Errors); err != nil {
++					dcontext.GetLogger(c).Errorf("error serving error json: %v (from %v)", err, c.Errors)
+ 				}
+ 				return
+ 			}
+-			repository, err := app.registry.Repository(context, nameRef)
++			repository, err := app.registry.Repository(c, nameRef)
+ 
+ 			if err != nil {
+-				dcontext.GetLogger(context).Errorf("error resolving repository: %v", err)
++				dcontext.GetLogger(c).Errorf("error resolving repository: %v", err)
+ 
+ 				switch err := err.(type) {
+ 				case distribution.ErrRepositoryUnknown:
+-					context.Errors = append(context.Errors, v2.ErrorCodeNameUnknown.WithDetail(err))
++					c.Errors = append(c.Errors, v2.ErrorCodeNameUnknown.WithDetail(err))
+ 				case distribution.ErrRepositoryNameInvalid:
+-					context.Errors = append(context.Errors, v2.ErrorCodeNameInvalid.WithDetail(err))
++					c.Errors = append(c.Errors, v2.ErrorCodeNameInvalid.WithDetail(err))
+ 				case errcode.Error:
+-					context.Errors = append(context.Errors, err)
++					c.Errors = append(c.Errors, err)
+ 				}
+ 
+-				if err := errcode.ServeJSON(w, context.Errors); err != nil {
+-					dcontext.GetLogger(context).Errorf("error serving error json: %v (from %v)", err, context.Errors)
++				if err := errcode.ServeJSON(w, c.Errors); err != nil {
++					dcontext.GetLogger(c).Errorf("error serving error json: %v (from %v)", err, c.Errors)
+ 				}
+ 				return
+ 			}
+ 
+ 			// assign and decorate the authorized repository with an event bridge.
+-			context.Repository, context.RepositoryRemover = notifications.Listen(
++			c.Repository, c.RepositoryRemover = notifications.Listen(
+ 				repository,
+-				context.App.repoRemover,
+-				app.eventBridge(context, r))
++				c.App.repoRemover,
++				app.eventBridge(c, r))
++
++			instance := r.Header.Get("X-Instance")
++			if instance == "" {
++				instance = getInstanceFromRepo(repository)
++			}
++
++			c.Context = context.WithValue(c.Context, "instance", instance)
++			// dcontext.GetLogger(c).Infof("instance name is: %v or %v", instance, i)
+ 
+-			context.Repository, err = applyRepoMiddleware(app, context.Repository, app.Config.Middleware["repository"])
++			c.Repository, err = applyRepoMiddleware(app, c.Repository, app.Config.Middleware["repository"])
+ 			if err != nil {
+-				dcontext.GetLogger(context).Errorf("error initializing repository middleware: %v", err)
+-				context.Errors = append(context.Errors, errcode.ErrorCodeUnknown.WithDetail(err))
++				dcontext.GetLogger(c).Errorf("error initializing repository middleware: %v", err)
++				c.Errors = append(c.Errors, errcode.ErrorCodeUnknown.WithDetail(err))
+ 
+-				if err := errcode.ServeJSON(w, context.Errors); err != nil {
+-					dcontext.GetLogger(context).Errorf("error serving error json: %v (from %v)", err, context.Errors)
++				if err := errcode.ServeJSON(w, c.Errors); err != nil {
++					dcontext.GetLogger(c).Errorf("error serving error json: %v (from %v)", err, c.Errors)
+ 				}
+ 				return
+ 			}
+ 		}
+ 
+-		dispatch(context, r).ServeHTTP(w, r)
++		dispatch(c, r).ServeHTTP(w, r)
+ 		// Automated error response handling here. Handlers may return their
+ 		// own errors if they need different behavior (such as range errors
+ 		// for layer upload).
+-		if context.Errors.Len() > 0 {
+-			if err := errcode.ServeJSON(w, context.Errors); err != nil {
+-				dcontext.GetLogger(context).Errorf("error serving error json: %v (from %v)", err, context.Errors)
++		if c.Errors.Len() > 0 {
++			if err := errcode.ServeJSON(w, c.Errors); err != nil {
++				dcontext.GetLogger(c).Errorf("error serving error json: %v (from %v)", err, c.Errors)
+ 			}
+ 
+-			app.logError(context, context.Errors)
++			app.logError(c, c.Errors)
+ 		}
+ 	})
+ }
+ 
++func getInstanceFromRepo(repo distribution.Repository) string {
++	fullName := repo.Named().Name()
++	parts := strings.Split(fullName, "/")
++	projName := parts[0]
++	parts = strings.Split(projName, "__")
++	if len(parts) >= 2 {
++		return parts[0]
++	}
++
++	return ""
++}
++
+ type errCodeKey struct{}
+ 
+ func (errCodeKey) String() string { return "err.code" }
+diff --git a/registry/handlers/blobupload.go b/registry/handlers/blobupload.go
+index 611cce3c..85aeb84b 100644
+--- a/registry/handlers/blobupload.go
++++ b/registry/handlers/blobupload.go
+@@ -4,6 +4,7 @@ import (
+ 	"fmt"
+ 	"net/http"
+ 	"net/url"
++	"strings"
+ 
+ 	"github.com/distribution/reference"
+ 	"github.com/docker/distribution"
+@@ -111,6 +112,10 @@ func (buh *blobUploadHandler) StartBlobUpload(w http.ResponseWriter, r *http.Req
+ 	mountDigest := r.FormValue("mount")
+ 
+ 	if mountDigest != "" && fromRepo != "" {
++		if !buh.crossInstanceMountCheck(fromRepo) {
++			w.WriteHeader(http.StatusCreated)
++			return
++		}
+ 		opt, err := buh.createBlobMountOption(fromRepo, mountDigest)
+ 		if opt != nil && err == nil {
+ 			options = append(options, opt)
+@@ -366,3 +371,13 @@ func (buh *blobUploadHandler) writeBlobCreatedHeaders(w http.ResponseWriter, des
+ 	w.WriteHeader(http.StatusCreated)
+ 	return nil
+ }
++
++func (buh *blobUploadHandler) crossInstanceMountCheck(from string) bool {
++	instance := buh.Context.Value("instance").(string)
++	parts := strings.Split(from, "/")
++	projName := parts[0]
++	from = strings.Split(projName, "__")[0]
++
++	dcontext.GetLogger(buh).Infof("======================--------------------- cross instance mount from %s to %s", from, instance)
++	return instance == from
++}
+diff --git a/registry/storage/cache/multi/memory.go b/registry/storage/cache/multi/memory.go
+new file mode 100644
+index 00000000..e1fecc75
+--- /dev/null
++++ b/registry/storage/cache/multi/memory.go
+@@ -0,0 +1,199 @@
++package multi
++
++import (
++	"context"
++	"sync"
++
++	"github.com/distribution/reference"
++	"github.com/docker/distribution"
++	"github.com/docker/distribution/registry/storage/cache"
++	"github.com/opencontainers/go-digest"
++)
++
++type inMemoryBlobDescriptorCacheProvider struct {
++	global       *mapBlobDescriptorCache
++	repositories map[string]*mapBlobDescriptorCache
++	mu           sync.RWMutex
++}
++
++type instancedDigest struct {
++	digest   digest.Digest
++	instance string
++}
++
++// NewInMemoryBlobDescriptorCacheProvider returns a new mapped-based cache for
++// storing blob descriptor data.
++func NewInMemoryBlobDescriptorCacheProvider() cache.BlobDescriptorCacheProvider {
++	return &inMemoryBlobDescriptorCacheProvider{
++		global:       newMapBlobDescriptorCache(),
++		repositories: make(map[string]*mapBlobDescriptorCache),
++	}
++}
++
++func (imbdcp *inMemoryBlobDescriptorCacheProvider) RepositoryScoped(repo string) (distribution.BlobDescriptorService, error) {
++	if _, err := reference.ParseNormalizedNamed(repo); err != nil {
++		return nil, err
++	}
++
++	imbdcp.mu.RLock()
++	defer imbdcp.mu.RUnlock()
++
++	return &repositoryScopedInMemoryBlobDescriptorCache{
++		repo:       repo,
++		parent:     imbdcp,
++		repository: imbdcp.repositories[repo],
++	}, nil
++}
++
++func (imbdcp *inMemoryBlobDescriptorCacheProvider) Stat(ctx context.Context, dgst digest.Digest) (distribution.Descriptor, error) {
++	return imbdcp.global.Stat(ctx, dgst)
++}
++
++func (imbdcp *inMemoryBlobDescriptorCacheProvider) Clear(ctx context.Context, dgst digest.Digest) error {
++	return imbdcp.global.Clear(ctx, dgst)
++}
++
++func (imbdcp *inMemoryBlobDescriptorCacheProvider) SetDescriptor(ctx context.Context, dgst digest.Digest, desc distribution.Descriptor) error {
++	_, err := imbdcp.Stat(ctx, dgst)
++	if err == distribution.ErrBlobUnknown {
++
++		if dgst.Algorithm() != desc.Digest.Algorithm() && dgst != desc.Digest {
++			// if the digests differ, set the other canonical mapping
++			if err := imbdcp.global.SetDescriptor(ctx, desc.Digest, desc); err != nil {
++				return err
++			}
++		}
++
++		// unknown, just set it
++		return imbdcp.global.SetDescriptor(ctx, dgst, desc)
++	}
++
++	// we already know it, do nothing
++	return err
++}
++
++// repositoryScopedInMemoryBlobDescriptorCache provides the request scoped
++// repository cache. Instances are not thread-safe but the delegated
++// operations are.
++type repositoryScopedInMemoryBlobDescriptorCache struct {
++	repo       string
++	parent     *inMemoryBlobDescriptorCacheProvider // allows lazy allocation of repo's map
++	repository *mapBlobDescriptorCache
++}
++
++func (rsimbdcp *repositoryScopedInMemoryBlobDescriptorCache) Stat(ctx context.Context, dgst digest.Digest) (distribution.Descriptor, error) {
++	rsimbdcp.parent.mu.Lock()
++	repo := rsimbdcp.repository
++	rsimbdcp.parent.mu.Unlock()
++
++	if repo == nil {
++		return distribution.Descriptor{}, distribution.ErrBlobUnknown
++	}
++
++	return repo.Stat(ctx, dgst)
++}
++
++func (rsimbdcp *repositoryScopedInMemoryBlobDescriptorCache) Clear(ctx context.Context, dgst digest.Digest) error {
++	rsimbdcp.parent.mu.Lock()
++	repo := rsimbdcp.repository
++	rsimbdcp.parent.mu.Unlock()
++
++	if repo == nil {
++		return distribution.ErrBlobUnknown
++	}
++
++	return repo.Clear(ctx, dgst)
++}
++
++func (rsimbdcp *repositoryScopedInMemoryBlobDescriptorCache) SetDescriptor(ctx context.Context, dgst digest.Digest, desc distribution.Descriptor) error {
++	rsimbdcp.parent.mu.Lock()
++	repo := rsimbdcp.repository
++	if repo == nil {
++		// allocate map since we are setting it now.
++		var ok bool
++		// have to read back value since we may have allocated elsewhere.
++		repo, ok = rsimbdcp.parent.repositories[rsimbdcp.repo]
++		if !ok {
++			repo = newMapBlobDescriptorCache()
++			rsimbdcp.parent.repositories[rsimbdcp.repo] = repo
++		}
++		rsimbdcp.repository = repo
++	}
++	rsimbdcp.parent.mu.Unlock()
++
++	if err := repo.SetDescriptor(ctx, dgst, desc); err != nil {
++		return err
++	}
++
++	return rsimbdcp.parent.SetDescriptor(ctx, dgst, desc)
++}
++
++// mapBlobDescriptorCache provides a simple map-based implementation of the
++// descriptor cache.
++type mapBlobDescriptorCache struct {
++	descriptors map[instancedDigest]distribution.Descriptor
++	mu          sync.RWMutex
++}
++
++var _ distribution.BlobDescriptorService = &mapBlobDescriptorCache{}
++
++func newMapBlobDescriptorCache() *mapBlobDescriptorCache {
++	return &mapBlobDescriptorCache{
++		descriptors: make(map[instancedDigest]distribution.Descriptor),
++	}
++}
++
++func (mbdc *mapBlobDescriptorCache) Stat(ctx context.Context, dgst digest.Digest) (distribution.Descriptor, error) {
++	if err := dgst.Validate(); err != nil {
++		return distribution.Descriptor{}, err
++	}
++
++	instance := ctx.Value("instance").(string)
++	d := instancedDigest{
++		digest:   dgst,
++		instance: instance,
++	}
++	mbdc.mu.RLock()
++	defer mbdc.mu.RUnlock()
++
++	desc, ok := mbdc.descriptors[d]
++	if !ok {
++		return distribution.Descriptor{}, distribution.ErrBlobUnknown
++	}
++
++	return desc, nil
++}
++
++func (mbdc *mapBlobDescriptorCache) Clear(ctx context.Context, dgst digest.Digest) error {
++	mbdc.mu.Lock()
++	defer mbdc.mu.Unlock()
++	instance := ctx.Value("instance").(string)
++	d := instancedDigest{
++		digest:   dgst,
++		instance: instance,
++	}
++
++	delete(mbdc.descriptors, d)
++	return nil
++}
++
++func (mbdc *mapBlobDescriptorCache) SetDescriptor(ctx context.Context, dgst digest.Digest, desc distribution.Descriptor) error {
++	if err := dgst.Validate(); err != nil {
++		return err
++	}
++
++	if err := cache.ValidateDescriptor(desc); err != nil {
++		return err
++	}
++	instance := ctx.Value("instance").(string)
++	d := instancedDigest{
++		digest:   dgst,
++		instance: instance,
++	}
++
++	mbdc.mu.Lock()
++	defer mbdc.mu.Unlock()
++
++	mbdc.descriptors[d] = desc
++	return nil
++}
+diff --git a/registry/storage/driver/multi/driver.go b/registry/storage/driver/multi/driver.go
+new file mode 100644
+index 00000000..fb82328d
+--- /dev/null
++++ b/registry/storage/driver/multi/driver.go
+@@ -0,0 +1,428 @@
++package multi
++
++import (
++	"bufio"
++	"bytes"
++	"context"
++	"fmt"
++	"io"
++	"io/ioutil"
++	"log"
++	"os"
++	"path"
++	"time"
++
++	storagedriver "github.com/docker/distribution/registry/storage/driver"
++	"github.com/docker/distribution/registry/storage/driver/base"
++	"github.com/docker/distribution/registry/storage/driver/factory"
++)
++
++const (
++	driverName           = "multi-instance"
++	defaultRootDirectory = "/var/lib/registry"
++	defaultMaxThreads    = uint64(100)
++
++	// minThreads is the minimum value for the maxthreads configuration
++	// parameter. If the driver's parameters are less than this we set
++	// the parameters to minThreads
++	minThreads = uint64(25)
++)
++
++// DriverParameters represents all configuration options available for the
++// filesystem driver
++type DriverParameters struct {
++	RootDirectory string
++	MaxThreads    uint64
++}
++
++func init() {
++	factory.Register(driverName, &filesystemDriverFactory{})
++}
++
++// filesystemDriverFactory implements the factory.StorageDriverFactory interface
++type filesystemDriverFactory struct{}
++
++func (factory *filesystemDriverFactory) Create(parameters map[string]interface{}) (storagedriver.StorageDriver, error) {
++	return FromParameters(parameters)
++}
++
++type driver struct {
++	rootDirectory string
++}
++
++type baseEmbed struct {
++	base.Base
++}
++
++// Driver is a storagedriver.StorageDriver implementation backed by a local
++// filesystem. All provided paths will be subpaths of the RootDirectory.
++type Driver struct {
++	baseEmbed
++}
++
++// FromParameters constructs a new Driver with a given parameters map
++// Optional Parameters:
++// - rootdirectory
++// - maxthreads
++func FromParameters(parameters map[string]interface{}) (*Driver, error) {
++	params, err := fromParametersImpl(parameters)
++	if err != nil || params == nil {
++		return nil, err
++	}
++	return New(*params), nil
++}
++
++func fromParametersImpl(parameters map[string]interface{}) (*DriverParameters, error) {
++	var (
++		err           error
++		maxThreads    = defaultMaxThreads
++		rootDirectory = defaultRootDirectory
++	)
++
++	if parameters != nil {
++		if rootDir, ok := parameters["rootdirectory"]; ok {
++			rootDirectory = fmt.Sprint(rootDir)
++		}
++
++		maxThreads, err = base.GetLimitFromParameter(parameters["maxthreads"], minThreads, defaultMaxThreads)
++		if err != nil {
++			return nil, fmt.Errorf("maxthreads config error: %s", err.Error())
++		}
++	}
++
++	params := &DriverParameters{
++		RootDirectory: rootDirectory,
++		MaxThreads:    maxThreads,
++	}
++	return params, nil
++}
++
++// New constructs a new Driver with a given rootDirectory
++func New(params DriverParameters) *Driver {
++	fsDriver := &driver{rootDirectory: params.RootDirectory}
++
++	return &Driver{
++		baseEmbed: baseEmbed{
++			Base: base.Base{
++				StorageDriver: base.NewRegulator(fsDriver, params.MaxThreads),
++			},
++		},
++	}
++}
++
++// Implement the storagedriver.StorageDriver interface
++
++func (d *driver) Name() string {
++	return driverName
++}
++
++// GetContent retrieves the content stored at "path" as a []byte.
++func (d *driver) GetContent(ctx context.Context, path string) ([]byte, error) {
++	//instance := ctx.Value("instance").(string)
++	//log.Printf("instance is ==============: %s", instance)
++	//path = filepath.Join(instance, path)
++	rc, err := d.Reader(ctx, path, 0)
++	if err != nil {
++		return nil, err
++	}
++	defer rc.Close()
++
++	p, err := ioutil.ReadAll(rc)
++	if err != nil {
++		return nil, err
++	}
++
++	return p, nil
++}
++
++// PutContent stores the []byte content at a location designated by "path".
++func (d *driver) PutContent(ctx context.Context, subPath string, contents []byte) error {
++	writer, err := d.Writer(ctx, subPath, false)
++	if err != nil {
++		return err
++	}
++	defer writer.Close()
++	_, err = io.Copy(writer, bytes.NewReader(contents))
++	if err != nil {
++		writer.Cancel()
++		return err
++	}
++	return writer.Commit()
++}
++
++// Reader retrieves an io.ReadCloser for the content stored at "path" with a
++// given byte offset.
++func (d *driver) Reader(ctx context.Context, path string, offset int64) (io.ReadCloser, error) {
++	file, err := os.OpenFile(d.fullPath(ctx, path), os.O_RDONLY, 0644)
++	if err != nil {
++		if os.IsNotExist(err) {
++			return nil, storagedriver.PathNotFoundError{Path: path}
++		}
++
++		return nil, err
++	}
++
++	seekPos, err := file.Seek(offset, io.SeekStart)
++	if err != nil {
++		file.Close()
++		return nil, err
++	} else if seekPos < offset {
++		file.Close()
++		return nil, storagedriver.InvalidOffsetError{Path: path, Offset: offset}
++	}
++
++	return file, nil
++}
++
++func (d *driver) Writer(ctx context.Context, subPath string, append bool) (storagedriver.FileWriter, error) {
++	fullPath := d.fullPath(ctx, subPath)
++	parentDir := path.Dir(fullPath)
++	if err := os.MkdirAll(parentDir, 0777); err != nil {
++		return nil, err
++	}
++
++	fp, err := os.OpenFile(fullPath, os.O_WRONLY|os.O_CREATE, 0666)
++	if err != nil {
++		return nil, err
++	}
++
++	var offset int64
++
++	if !append {
++		err := fp.Truncate(0)
++		if err != nil {
++			fp.Close()
++			return nil, err
++		}
++	} else {
++		n, err := fp.Seek(0, io.SeekEnd)
++		if err != nil {
++			fp.Close()
++			return nil, err
++		}
++		offset = n
++	}
++
++	return newFileWriter(fp, offset), nil
++}
++
++// Stat retrieves the FileInfo for the given path, including the current size
++// in bytes and the creation time.
++func (d *driver) Stat(ctx context.Context, subPath string) (storagedriver.FileInfo, error) {
++	fullPath := d.fullPath(ctx, subPath)
++
++	fi, err := os.Stat(fullPath)
++	if err != nil {
++		if os.IsNotExist(err) {
++			return nil, storagedriver.PathNotFoundError{Path: subPath}
++		}
++
++		return nil, err
++	}
++
++	return fileInfo{
++		path:     subPath,
++		FileInfo: fi,
++	}, nil
++}
++
++// List returns a list of the objects that are direct descendants of the given
++// path.
++func (d *driver) List(ctx context.Context, subPath string) ([]string, error) {
++	fullPath := d.fullPath(ctx, subPath)
++
++	dir, err := os.Open(fullPath)
++	if err != nil {
++		if os.IsNotExist(err) {
++			return nil, storagedriver.PathNotFoundError{Path: subPath}
++		}
++		return nil, err
++	}
++
++	defer dir.Close()
++
++	fileNames, err := dir.Readdirnames(0)
++	if err != nil {
++		return nil, err
++	}
++
++	keys := make([]string, 0, len(fileNames))
++	for _, fileName := range fileNames {
++		keys = append(keys, path.Join(subPath, fileName))
++	}
++
++	return keys, nil
++}
++
++// Move moves an object stored at sourcePath to destPath, removing the original
++// object.
++func (d *driver) Move(ctx context.Context, sourcePath string, destPath string) error {
++	source := d.fullPath(ctx, sourcePath)
++	dest := d.fullPath(ctx, destPath)
++
++	if _, err := os.Stat(source); os.IsNotExist(err) {
++		return storagedriver.PathNotFoundError{Path: sourcePath}
++	}
++
++	if err := os.MkdirAll(path.Dir(dest), 0755); err != nil {
++		return err
++	}
++
++	err := os.Rename(source, dest)
++	return err
++}
++
++// Delete recursively deletes all objects stored at "path" and its subpaths.
++func (d *driver) Delete(ctx context.Context, subPath string) error {
++	fullPath := d.fullPath(ctx, subPath)
++
++	_, err := os.Stat(fullPath)
++	if err != nil && !os.IsNotExist(err) {
++		return err
++	} else if err != nil {
++		return storagedriver.PathNotFoundError{Path: subPath}
++	}
++
++	err = os.RemoveAll(fullPath)
++	return err
++}
++
++// URLFor returns a URL which may be used to retrieve the content stored at the given path.
++// May return an UnsupportedMethodErr in certain StorageDriver implementations.
++func (d *driver) URLFor(ctx context.Context, path string, options map[string]interface{}) (string, error) {
++	return "", storagedriver.ErrUnsupportedMethod{}
++}
++
++// Walk traverses a filesystem defined within driver, starting
++// from the given path, calling f on each file
++func (d *driver) Walk(ctx context.Context, path string, f storagedriver.WalkFn) error {
++	return storagedriver.WalkFallback(ctx, d, path, f)
++}
++
++// fullPath returns the absolute path of a key within the Driver's storage.
++func (d *driver) fullPath(ctx context.Context, subPath string) string {
++	instance := ctx.Value("instance").(string)
++	log.Printf("instance is ==============: %s", instance)
++	root := path.Join(d.rootDirectory, instance)
++
++	return path.Join(root, subPath)
++}
++
++type fileInfo struct {
++	os.FileInfo
++	path string
++}
++
++var _ storagedriver.FileInfo = fileInfo{}
++
++// Path provides the full path of the target of this file info.
++func (fi fileInfo) Path() string {
++	return fi.path
++}
++
++// Size returns current length in bytes of the file. The return value can
++// be used to write to the end of the file at path. The value is
++// meaningless if IsDir returns true.
++func (fi fileInfo) Size() int64 {
++	if fi.IsDir() {
++		return 0
++	}
++
++	return fi.FileInfo.Size()
++}
++
++// ModTime returns the modification time for the file. For backends that
++// don't have a modification time, the creation time should be returned.
++func (fi fileInfo) ModTime() time.Time {
++	return fi.FileInfo.ModTime()
++}
++
++// IsDir returns true if the path is a directory.
++func (fi fileInfo) IsDir() bool {
++	return fi.FileInfo.IsDir()
++}
++
++type fileWriter struct {
++	file      *os.File
++	size      int64
++	bw        *bufio.Writer
++	closed    bool
++	committed bool
++	cancelled bool
++}
++
++func newFileWriter(file *os.File, size int64) *fileWriter {
++	return &fileWriter{
++		file: file,
++		size: size,
++		bw:   bufio.NewWriter(file),
++	}
++}
++
++func (fw *fileWriter) Write(p []byte) (int, error) {
++	if fw.closed {
++		return 0, fmt.Errorf("already closed")
++	} else if fw.committed {
++		return 0, fmt.Errorf("already committed")
++	} else if fw.cancelled {
++		return 0, fmt.Errorf("already cancelled")
++	}
++	n, err := fw.bw.Write(p)
++	fw.size += int64(n)
++	return n, err
++}
++
++func (fw *fileWriter) Size() int64 {
++	return fw.size
++}
++
++func (fw *fileWriter) Close() error {
++	if fw.closed {
++		return fmt.Errorf("already closed")
++	}
++
++	if err := fw.bw.Flush(); err != nil {
++		return err
++	}
++
++	if err := fw.file.Sync(); err != nil {
++		return err
++	}
++
++	if err := fw.file.Close(); err != nil {
++		return err
++	}
++	fw.closed = true
++	return nil
++}
++
++func (fw *fileWriter) Cancel() error {
++	if fw.closed {
++		return fmt.Errorf("already closed")
++	}
++
++	fw.cancelled = true
++	fw.file.Close()
++	return os.Remove(fw.file.Name())
++}
++
++func (fw *fileWriter) Commit() error {
++	if fw.closed {
++		return fmt.Errorf("already closed")
++	} else if fw.committed {
++		return fmt.Errorf("already committed")
++	} else if fw.cancelled {
++		return fmt.Errorf("already cancelled")
++	}
++
++	if err := fw.bw.Flush(); err != nil {
++		return err
++	}
++
++	if err := fw.file.Sync(); err != nil {
++		return err
++	}
++
++	fw.committed = true
++	return nil
++}
+-- 
+2.24.3 (Apple Git-128)
+

@@ -218,7 +218,7 @@ github.com/docker/cli/cli/config
 github.com/docker/cli/cli/config/configfile
 github.com/docker/cli/cli/config/credentials
 github.com/docker/cli/cli/config/types
-# github.com/docker/distribution v2.8.0+incompatible => code.byted.org/infcp/cr-distribution v2.5.3-cr-v2.13.0+incompatible
+# github.com/docker/distribution v2.8.0+incompatible => code.byted.org/infcp/cr-distribution v2.5.3-cr-v2.13.0.0.20240809072603-75ed58455f1c+incompatible
 ## explicit
 github.com/docker/distribution
 github.com/docker/distribution/configuration
@@ -253,6 +253,7 @@ github.com/docker/distribution/registry/storage/driver/inmemory
 github.com/docker/distribution/registry/storage/driver/middleware
 github.com/docker/distribution/registry/storage/driver/middleware/cloudfront
 github.com/docker/distribution/registry/storage/driver/middleware/redirect
+github.com/docker/distribution/registry/storage/driver/multi
 github.com/docker/distribution/registry/storage/driver/oss
 github.com/docker/distribution/registry/storage/driver/s3-aws
 github.com/docker/distribution/registry/storage/driver/swift
@@ -1291,7 +1292,7 @@ sigs.k8s.io/structured-merge-diff/v4/value
 ## explicit; go 1.12
 sigs.k8s.io/yaml
 # github.com/Azure/go-autorest => github.com/Azure/go-autorest v14.2.0+incompatible
-# github.com/docker/distribution => code.byted.org/infcp/cr-distribution v2.5.3-cr-v2.13.0+incompatible
+# github.com/docker/distribution => code.byted.org/infcp/cr-distribution v2.5.3-cr-v2.13.0.0.20240809072603-75ed58455f1c+incompatible
 # github.com/goharbor/harbor => ../
 # google.golang.org/api => google.golang.org/api v0.0.0-20160322025152-9bf6e6e569ff
 # google.golang.org/cloud => cloud.google.com/go v0.0.0-20151119220103-975617b05ea8

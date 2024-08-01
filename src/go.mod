@@ -230,7 +230,7 @@ require github.com/hashicorp/golang-lru v0.5.4 // indirect
 
 replace (
 	github.com/Azure/go-autorest => github.com/Azure/go-autorest v14.2.0+incompatible
-	github.com/docker/distribution => code.byted.org/infcp/cr-distribution v2.5.3-cr-v2.13.0+incompatible
+	github.com/docker/distribution => code.byted.org/infcp/cr-distribution v2.5.3-cr-v2.13.0.0.20240809072603-75ed58455f1c+incompatible
 	github.com/goharbor/harbor => ../
 	google.golang.org/api => google.golang.org/api v0.0.0-20160322025152-9bf6e6e569ff
 	google.golang.org/cloud => cloud.google.com/go v0.0.0-20151119220103-975617b05ea8

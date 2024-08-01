@@ -72,6 +72,7 @@ type ArtifactAndBlob struct {
 	DigestAF     string    `orm:"column(digest_af)" json:"digest_af"`
 	DigestBlob   string    `orm:"column(digest_blob)" json:"digest_blob"`
 	CreationTime time.Time `orm:"column(creation_time);auto_now_add" json:"creation_time"`
+	Instance     string    `orm:"column(instance)" json:"instance"`
 }
 
 // TableName ...
@@ -102,6 +103,7 @@ type Blob struct {
 	UpdateTime   time.Time `orm:"column(update_time);auto_now_add" json:"update_time"`
 	Version      int64     `orm:"column(version)" json:"version"`
 	CreationTime time.Time `orm:"column(creation_time);auto_now_add" json:"creation_time"`
+	Instance     string    `orm:"column(instance)" json:"instance"`
 }
 
 // TableName ...

@@ -92,6 +92,11 @@ func New() DAO {
 type dao struct{}
 
 func (d *dao) CreateArtifactAndBlob(ctx context.Context, artifactDigest, blobDigest string) (int64, error) {
+	instance := parseInstance(ctx)
+	if instance == "" {
+		return 0, errors.BadRequestError(nil).WithMessage("no instance provided")
+	}
+
 	o, err := orm.FromContext(ctx)
 	if err != nil {
 		return 0, err
@@ -101,12 +106,17 @@ func (d *dao) CreateArtifactAndBlob(ctx context.Context, artifactDigest, blobDig
 		DigestAF:     artifactDigest,
 		DigestBlob:   blobDigest,
 		CreationTime: time.Now(),
+		Instance:     instance,
 	}
-
-	return o.InsertOrUpdate(md, "digest_af, digest_blob")
+	return o.InsertOrUpdate(md, "digest_af, digest_blob, instance")
 }
 
 func (d *dao) GetArtifactAndBlob(ctx context.Context, artifactDigest, blobDigest string) (*models.ArtifactAndBlob, error) {
+	instance := parseInstance(ctx)
+	if instance == "" {
+		return nil, errors.BadRequestError(nil).WithMessage("no instance provided")
+	}
+
 	o, err := orm.FromContext(ctx)
 	if err != nil {
 		return nil, err
@@ -115,17 +125,24 @@ func (d *dao) GetArtifactAndBlob(ctx context.Context, artifactDigest, blobDigest
 	md := &models.ArtifactAndBlob{
 		DigestAF:   artifactDigest,
 		DigestBlob: blobDigest,
+		Instance:   instance,
 	}
 
-	if err := o.Read(md, "digest_af", "digest_blob"); err != nil {
-		return nil, orm.WrapNotFoundError(err, "not found by artifact digest %s and blob digest %s", artifactDigest, blobDigest)
+	if err := o.Read(md, "digest_af", "digest_blob", "instance"); err != nil {
+		return nil, orm.WrapNotFoundError(err, "not found by instance %s, artifact digest %s and blob digest %s", instance, artifactDigest, blobDigest)
 	}
 
 	return md, nil
 }
 
 func (d *dao) DeleteArtifactAndBlobByArtifact(ctx context.Context, artifactDigest string) error {
-	qs, err := orm.QuerySetter(ctx, &models.ArtifactAndBlob{}, q.New(q.KeyWords{"digest_af": artifactDigest}))
+	instance := parseInstance(ctx)
+	if instance == "" {
+		return errors.BadRequestError(nil).WithMessage("no instance provided")
+	}
+
+	kw := q.KeyWords{"digest_af": artifactDigest, "instance": instance}
+	qs, err := orm.QuerySetter(ctx, &models.ArtifactAndBlob{}, q.New(kw))
 	if err != nil {
 		return err
 	}
@@ -135,7 +152,14 @@ func (d *dao) DeleteArtifactAndBlobByArtifact(ctx context.Context, artifactDiges
 }
 
 func (d *dao) GetAssociatedBlobDigestsForArtifact(ctx context.Context, artifact string) ([]string, error) {
-	qs, err := orm.QuerySetter(ctx, &models.ArtifactAndBlob{}, q.New(q.KeyWords{"digest_af": artifact}))
+	// This is currently not called anywhere,
+	// add guards in case it is called in the future
+	instance := parseInstance(ctx)
+	if instance == "" {
+		return nil, errors.BadRequestError(nil).WithMessage("no instance provided")
+	}
+	kw := q.KeyWords{"digest_af": artifact, "instance": instance}
+	qs, err := orm.QuerySetter(ctx, &models.ArtifactAndBlob{}, q.New(kw))
 	if err != nil {
 		return nil, err
 	}
@@ -154,6 +178,10 @@ func (d *dao) GetAssociatedBlobDigestsForArtifact(ctx context.Context, artifact 
 }
 
 func (d *dao) CreateBlob(ctx context.Context, blob *models.Blob) (int64, error) {
+	instance := parseInstance(ctx)
+	if instance == "" {
+		return 0, errors.BadRequestError(nil).WithMessage("no instance provided")
+	}
 	o, err := orm.FromContext(ctx)
 	if err != nil {
 		return 0, err
@@ -162,25 +190,35 @@ func (d *dao) CreateBlob(ctx context.Context, blob *models.Blob) (int64, error) 
 	blob.CreationTime = time.Now()
 	// the default status is none
 	blob.Status = models.StatusNone
+	blob.Instance = instance
 
-	return o.InsertOrUpdate(blob, "digest")
+	return o.InsertOrUpdate(blob, "digest, instance")
 }
 
 func (d *dao) GetBlobByDigest(ctx context.Context, digest string) (*models.Blob, error) {
+	instance := parseInstance(ctx)
+	if instance == "" {
+		return nil, errors.BadRequestError(nil).WithMessage("no instance provided")
+	}
 	o, err := orm.FromContext(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	blob := &models.Blob{Digest: digest}
-	if err = o.Read(blob, "digest"); err != nil {
-		return nil, orm.WrapNotFoundError(err, "blob %s not found", digest)
+	blob := &models.Blob{Digest: digest, Instance: instance}
+	if err = o.Read(blob, "digest", "instance"); err != nil {
+		return nil, orm.WrapNotFoundError(err, "blob %s not found for instance %s", digest, instance)
 	}
 
 	return blob, nil
 }
 
 func (d *dao) UpdateBlobStatus(ctx context.Context, blob *models.Blob) (int64, error) {
+	instance := parseInstance(ctx)
+	if instance == "" {
+		return 0, errors.BadRequestError(nil).WithMessage("no instance provided")
+	}
+
 	o, err := orm.FromContext(ctx)
 	if err != nil {
 		return -1, err
@@ -188,9 +226,9 @@ func (d *dao) UpdateBlobStatus(ctx context.Context, blob *models.Blob) (int64, e
 
 	var sql string
 	if blob.Status == models.StatusNone {
-		sql = `UPDATE blob SET version = version + 1, update_time = ?, status = ? where id = ? AND version >= ? AND status IN (%s) RETURNING version as new_version`
+		sql = `UPDATE blob SET version = version + 1, update_time = ?, status = ? where id = ? AND version >= ? AND status IN (%s)`
 	} else {
-		sql = `UPDATE blob SET version = version + 1, update_time = ?, status = ? where id = ? AND version = ? AND status IN (%s) RETURNING version as new_version`
+		sql = `UPDATE blob SET version = version + 1, update_time = ?, status = ? where id = ? AND version = ? AND status IN (%s)`
 	}
 
 	var newVersion int64
@@ -199,6 +237,12 @@ func (d *dao) UpdateBlobStatus(ctx context.Context, blob *models.Blob) (int64, e
 	for _, stat := range stats {
 		params = append(params, stat)
 	}
+	if instance != "" {
+		sql += ` AND instance = ?`
+		params = append(params, instance)
+	}
+	sql += ` RETURNING version as new_version`
+
 	if err := o.Raw(fmt.Sprintf(sql, orm.ParamPlaceholderForIn(len(models.StatusMap[blob.Status]))), params...).QueryRow(&newVersion); err != nil {
 		if e := orm.AsNotFoundError(err, "no blob is updated"); e != nil {
 			log.Warningf("no blob is updated according to query condition, id: %d, status_in, %v, err: %v", blob.ID, models.StatusMap[blob.Status], e)
@@ -214,6 +258,14 @@ func (d *dao) UpdateBlobStatus(ctx context.Context, blob *models.Blob) (int64, e
 // UpdateBlob cannot handle the status change and version increase, for handling blob status change, please call
 // for the UpdateBlobStatus.
 func (d *dao) UpdateBlob(ctx context.Context, blob *models.Blob) error {
+	// the instance should already been passed in with instance field
+	// but we'll do the same thing for consistency
+	instance := parseInstance(ctx)
+	if instance == "" {
+		return errors.BadRequestError(nil).WithMessage("no instance provided")
+	}
+	blob.Instance = instance
+
 	o, err := orm.FromContext(ctx)
 	if err != nil {
 		return err
@@ -224,6 +276,11 @@ func (d *dao) UpdateBlob(ctx context.Context, blob *models.Blob) error {
 }
 
 func (d *dao) ListBlobs(ctx context.Context, query *q.Query) ([]*models.Blob, error) {
+	instance := parseInstance(ctx)
+	if instance == "" {
+		return nil, errors.BadRequestError(nil).WithMessage("no instance provided")
+	}
+	query.Keywords["instance"] = instance
 	qs, err := orm.QuerySetter(ctx, &models.Blob{}, query)
 	if err != nil {
 		return nil, err
@@ -238,6 +295,10 @@ func (d *dao) ListBlobs(ctx context.Context, query *q.Query) ([]*models.Blob, er
 func (d *dao) FindBlobsShouldUnassociatedWithProject(ctx context.Context, projectID int64, blobs []*models.Blob) ([]*models.Blob, error) {
 	if len(blobs) == 0 {
 		return nil, nil
+	}
+	instance := parseInstance(ctx)
+	if instance == "" {
+		return nil, errors.BadRequestError(nil).WithMessage("no instance provided")
 	}
 
 	o, err := orm.FromContext(ctx)
@@ -363,6 +424,7 @@ func (d *dao) DeleteProjectBlob(ctx context.Context, projectID int64, blobIDs ..
 		ol.Values = append(ol.Values, blobID)
 	}
 	kw := q.KeyWords{"blob_id": ol, "project_id": projectID}
+	log.Infof("DeleteProjectBlob: %+v", kw)
 	qs, err := orm.QuerySetter(ctx, &models.ProjectBlob{}, q.New(kw))
 	if err != nil {
 		return err
@@ -396,7 +458,7 @@ func (d *dao) GetBlobsNotRefedByProjectBlob(ctx context.Context, timeWindowHours
 		return noneRefed, err
 	}
 
-	sql := fmt.Sprintf(`SELECT b.id, b.digest, b.content_type, b.status, b.version, b.size FROM blob AS b LEFT JOIN project_blob pb ON b.id = pb.blob_id WHERE pb.id IS NULL AND b.update_time <= now() - interval '%d hours';`, timeWindowHours)
+	sql := fmt.Sprintf(`SELECT b.id, b.digest, b.content_type, b.status, b.version, b.size, b.instance FROM blob AS b LEFT JOIN project_blob pb ON b.id = pb.blob_id WHERE pb.id IS NULL AND b.update_time <= now() - interval '%d hours';`, timeWindowHours)
 	_, err = ormer.Raw(sql).QueryRows(&noneRefed)
 	if err != nil {
 		return noneRefed, err
@@ -406,17 +468,32 @@ func (d *dao) GetBlobsNotRefedByProjectBlob(ctx context.Context, timeWindowHours
 }
 
 func (d *dao) GetBlobsByArtDigest(ctx context.Context, digest string) ([]*models.Blob, error) {
+	instance := parseInstance(ctx)
+	if instance == "" {
+		return nil, errors.BadRequestError(nil).WithMessage("no instance provided")
+	}
+
 	var blobs []*models.Blob
 	ormer, err := orm.FromContext(ctx)
 	if err != nil {
 		return blobs, err
 	}
 
-	sql := `SELECT b.id, b.digest, b.content_type, b.status, b.version, b.size FROM artifact_blob AS ab LEFT JOIN blob b ON ab.digest_blob = b.digest WHERE ab.digest_af = ?`
-	_, err = ormer.Raw(sql, digest).QueryRows(&blobs)
+	sql := `SELECT b.id, b.digest, b.content_type, b.status, b.version, b.size FROM artifact_blob AS ab LEFT JOIN blob b ON ab.digest_blob = b.digest WHERE ab.digest_af = ? AND ab.instance = ?`
+	_, err = ormer.Raw(sql, digest, instance).QueryRows(&blobs)
 	if err != nil {
 		return blobs, err
 	}
 
 	return blobs, nil
+}
+
+func parseInstance(ctx context.Context) string {
+	instanceValue := ctx.Value("instance")
+	instance := "0"
+	if instanceValue != nil {
+		instance = instanceValue.(string)
+	}
+
+	return instance
 }

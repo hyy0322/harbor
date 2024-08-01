@@ -116,7 +116,7 @@ func (c *controller) AssociateWithArtifact(ctx context.Context, blobDigests []st
 
 	if exist {
 		log.G(ctx).Infof("artifact digest %s already exist, skip to associate blobs with the artifact", artifactDigest)
-		return nil
+		// return nil
 	}
 
 	for _, blobDigest := range append(blobDigests, artifactDigest) {

@@ -38,6 +38,7 @@ func newProxy() http.Handler {
 		proxy.Transport = commonhttp.GetHTTPTransport()
 	}
 
+	proxy.Director = instanceHeaderDirector(proxy.Director)
 	proxy.Director = basicAuthDirector(proxy.Director)
 	return proxy
 }
@@ -48,6 +49,23 @@ func basicAuthDirector(d func(*http.Request)) func(*http.Request) {
 		if r != nil {
 			u, p := config.RegistryCredential()
 			r.SetBasicAuth(u, p)
+		}
+	}
+}
+
+func instanceHeaderDirector(d func(*http.Request)) func(*http.Request) {
+	return func(r *http.Request) {
+		d(r)
+		if r != nil {
+			instanceValue := r.Context().Value("instance")
+
+			instance := "0"
+			if instanceValue != nil {
+				instance = instanceValue.(string)
+			}
+			if instance != "0" {
+				r.Header.Set("X-Instance", instance)
+			}
 		}
 	}
 }

@@ -37,8 +37,12 @@ type Client interface {
 	Health() error
 	// DeleteBlob deletes the specified blob. The "reference" should be "digest"
 	DeleteBlob(reference string) (err error)
+	// DeleteInstanceBlob delete the specified blob from a instance
+	DeleteInstanceBlob(instance string, reference string) (err error)
 	// DeleteManifest deletes the specified manifest. The "reference" can be "tag" or "digest"
 	DeleteManifest(repository, reference string) (err error)
+	// DeleteInstanceManifest delete the specified manifest from a instance
+	DeleteInstanceManifest(instance, repository, reference string) (err error)
 }
 
 type client struct {
@@ -90,9 +94,36 @@ func (c *client) DeleteBlob(reference string) (err error) {
 	return nil
 }
 
+func (c *client) DeleteInstanceBlob(instance string, reference string) (err error) {
+	req, err := http.NewRequest(http.MethodDelete, buildInstanceBlobURL(c.baseURL, instance, reference), nil)
+	if err != nil {
+		return err
+	}
+	resp, err := c.do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	return nil
+}
+
 // DeleteManifest ...
 func (c *client) DeleteManifest(repository, reference string) (err error) {
 	req, err := http.NewRequest(http.MethodDelete, buildManifestURL(c.baseURL, repository, reference), nil)
+	if err != nil {
+		return err
+	}
+	resp, err := c.do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	return nil
+}
+
+// DeleteManifest ...
+func (c *client) DeleteInstanceManifest(instance, repository, reference string) (err error) {
+	req, err := http.NewRequest(http.MethodDelete, buildInstanceManifestURL(c.baseURL, instance, repository, reference), nil)
 	if err != nil {
 		return err
 	}
@@ -138,4 +169,12 @@ func buildManifestURL(endpoint, repository, reference string) string {
 
 func buildBlobURL(endpoint, reference string) string {
 	return fmt.Sprintf("%s/api/registry/blob/%s", endpoint, reference)
+}
+
+func buildInstanceBlobURL(endpoint, instance, reference string) string {
+	return fmt.Sprintf("%s/api/registry/%s/blob/%s", endpoint, instance, reference)
+}
+
+func buildInstanceManifestURL(endpoint, instance, repository, reference string) string {
+	return fmt.Sprintf("%s/api/registry/%s/repository/%s/manifests/%s", endpoint, instance, repository, reference)
 }

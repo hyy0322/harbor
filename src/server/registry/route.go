@@ -52,6 +52,7 @@ func RegisterRoutes() {
 		Method(http.MethodGet).
 		Path("/*/manifests/:reference").
 		Middleware(metric.InjectOpIDMiddleware(metric.ManifestOperationID)).
+		Middleware(blob.ParseBlobInstance()).
 		Middleware(repoproxy.ManifestMiddleware()).
 		Middleware(contenttrust.Notary()).
 		Middleware(contenttrust.Cosign()).
@@ -61,6 +62,7 @@ func RegisterRoutes() {
 		Method(http.MethodHead).
 		Path("/*/manifests/:reference").
 		Middleware(metric.InjectOpIDMiddleware(metric.ManifestOperationID)).
+		Middleware(blob.ParseBlobInstance()).
 		Middleware(repoproxy.ManifestMiddleware()).
 		Middleware(contenttrust.Notary()).
 		Middleware(contenttrust.Cosign()).
@@ -70,12 +72,14 @@ func RegisterRoutes() {
 		Method(http.MethodDelete).
 		Path("/*/manifests/:reference").
 		Middleware(metric.InjectOpIDMiddleware(metric.ManifestOperationID)).
+		Middleware(blob.ParseBlobInstance()).
 		Middleware(quota.RefreshForProjectMiddleware()).
 		HandlerFunc(deleteManifest)
 	root.NewRoute().
 		Method(http.MethodPut).
 		Path("/*/manifests/:reference").
 		Middleware(metric.InjectOpIDMiddleware(metric.ManifestOperationID)).
+		Middleware(blob.ParseBlobInstance()).
 		Middleware(repoproxy.DisableBlobAndManifestUploadMiddleware()).
 		Middleware(immutable.Middleware()).
 		Middleware(quota.PutManifestMiddleware()).
@@ -87,6 +91,7 @@ func RegisterRoutes() {
 		Method(http.MethodHead).
 		Path("/*/blobs/:digest").
 		Middleware(metric.InjectOpIDMiddleware(metric.BlobsOperationID)).
+		Middleware(blob.ParseBlobInstance()).
 		Middleware(blob.HeadBlobMiddleware()).
 		Handler(proxy)
 	// blob get
@@ -102,6 +107,7 @@ func RegisterRoutes() {
 		Path("/*/blobs/uploads").
 		Middleware(metric.InjectOpIDMiddleware(metric.BlobsUploadOperationID)).
 		Middleware(repoproxy.DisableBlobAndManifestUploadMiddleware()).
+		Middleware(blob.ParseBlobInstance()).
 		Middleware(quota.PostInitiateBlobUploadMiddleware()).
 		Middleware(blob.PostInitiateBlobUploadMiddleware()).
 		Handler(proxy)
@@ -110,12 +116,14 @@ func RegisterRoutes() {
 		Method(http.MethodPatch).
 		Path("/*/blobs/uploads/:session_id").
 		Middleware(metric.InjectOpIDMiddleware(metric.BlobsUploadOperationID)).
+		Middleware(blob.ParseBlobInstance()).
 		Middleware(blob.PatchBlobUploadMiddleware()).
 		Handler(proxy)
 	root.NewRoute().
 		Method(http.MethodPut).
 		Path("/*/blobs/uploads/:session_id").
 		Middleware(metric.InjectOpIDMiddleware(metric.BlobsUploadOperationID)).
+		Middleware(blob.ParseBlobInstance()).
 		Middleware(quota.PutBlobUploadMiddleware()).
 		Middleware(blob.PutBlobUploadMiddleware()).
 		Handler(proxy)

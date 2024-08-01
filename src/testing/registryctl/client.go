@@ -18,7 +18,17 @@ func (c *Mockclient) DeleteBlob(reference string) (err error) {
 	return nil
 }
 
+// DeleteBlob ...
+func (c *Mockclient) DeleteInstanceBlob(instance, reference string) (err error) {
+	return nil
+}
+
 // DeleteManifest ...
 func (c *Mockclient) DeleteManifest(repository, reference string) (err error) {
+	return nil
+}
+
+// DeleteManifest ...
+func (c *Mockclient) DeleteInstanceManifest(instance, repository, reference string) (err error) {
 	return nil
 }

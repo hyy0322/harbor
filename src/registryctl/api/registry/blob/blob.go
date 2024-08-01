@@ -1,6 +1,7 @@
 package blob
 
 import (
+	"context"
 	"errors"
 	"net/http"
 
@@ -48,6 +49,11 @@ func (h *handler) delete(w http.ResponseWriter, r *http.Request) {
 		tracelib.RecordError(span, err, "no reference specified")
 		api.HandleBadRequest(w, err)
 		return
+	}
+	instance := mux.Vars(r)["name"]
+	if instance != "" {
+		log.Infof("deleting blob of instance: %s", instance)
+		ctx = context.WithValue(ctx, "instance", instance)
 	}
 	// don't parse the reference here as RemoveBlob does.
 	cleaner := storage.NewVacuum(ctx, h.storageDriver)

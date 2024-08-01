@@ -31,6 +31,8 @@ func newRouter(conf config.Configuration) http.Handler {
 	rootRouter.HandleFunc("/api/health", api.Health).Methods("GET")
 
 	rootRouter.Path("/api/registry/blob/{reference}").Methods(http.MethodDelete).Handler(blob.NewHandler(conf.StorageDriver))
-	rootRouter.Path("/api/registry/{name:.*}/manifests/{reference}").Methods(http.MethodDelete).Handler(manifest.NewHandler(conf.StorageDriver))
+	rootRouter.Path("/api/registry/{name:.*}/blob/{reference}").Methods(http.MethodDelete).Handler(blob.NewHandler(conf.StorageDriver))
+	//rootRouter.Path("/api/registry/{name:.*}/manifests/{reference}").Methods(http.MethodDelete).Handler(manifest.NewHandler(conf.StorageDriver))
+	rootRouter.Path("/api/registry/{instance:.*}/repository/{name:.*}/manifests/{reference}").Methods(http.MethodDelete).Handler(manifest.NewHandler(conf.StorageDriver))
 	return rootRouter
 }
