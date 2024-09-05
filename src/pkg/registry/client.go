@@ -123,6 +123,29 @@ func NewClientWithAuthorizer(url string, authorizer lib.Authorizer, insecure boo
 	}
 }
 
+// NewClientWithTransport new client with customized transport
+func NewClientWithTransport(url, username, password string, insecure bool, transport *http.Transport) Client {
+	return &client{
+		url:        url,
+		authorizer: auth.NewAuthorizer(username, password, insecure),
+		client: &http.Client{
+			Transport: transport,
+			Timeout:   30 * time.Minute,
+		},
+	}
+}
+
+// NewClientWithAuthorizerWithTransport creates a registry client with the provided authorizer
+func NewClientWithAuthorizerWithTransport(url string, authorizer lib.Authorizer, transport *http.Transport) Client {
+	return &client{
+		url:        url,
+		authorizer: authorizer,
+		client: &http.Client{
+			Transport: transport,
+		},
+	}
+}
+
 type client struct {
 	url        string
 	authorizer lib.Authorizer

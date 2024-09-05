@@ -16,6 +16,7 @@ package native
 
 import (
 	"fmt"
+	"net/http"
 
 	"github.com/goharbor/harbor/src/common/utils"
 	"github.com/goharbor/harbor/src/lib"
@@ -81,6 +82,28 @@ func NewAdapterWithAuthorizer(reg *model.Registry, authorizer lib.Authorizer) *A
 	return &Adapter{
 		registry: reg,
 		Client:   registry.NewClientWithAuthorizer(reg.URL, authorizer, reg.Insecure),
+	}
+}
+
+// NewAdapterWithTransport returns an instance of the Adapter
+func NewAdapterWithTransport(reg *model.Registry, transport *http.Transport) *Adapter {
+	adapter := &Adapter{
+		registry: reg,
+	}
+	username, password := "", ""
+	if reg.Credential != nil {
+		username = reg.Credential.AccessKey
+		password = reg.Credential.AccessSecret
+	}
+	adapter.Client = registry.NewClientWithTransport(reg.URL, username, password, reg.Insecure, transport)
+	return adapter
+}
+
+// NewAdapterWithAuthorizerWithTransport returns an instance of the Adapter with provided authorizer
+func NewAdapterWithAuthorizerWithTransport(reg *model.Registry, authorizer lib.Authorizer, transport *http.Transport) *Adapter {
+	return &Adapter{
+		registry: reg,
+		Client:   registry.NewClientWithAuthorizerWithTransport(reg.URL, authorizer, transport),
 	}
 }
 
