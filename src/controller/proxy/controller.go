@@ -43,6 +43,8 @@ const (
 	sleepIntervalSec    = 20
 	// keep manifest list in cache for one week
 	manifestListCacheInterval = 7 * 24 * 60 * 60 * time.Second
+
+	lenWithInstanceID = 2
 )
 
 var (
@@ -300,7 +302,12 @@ func (c *controller) waitAndPushManifest(ctx context.Context, remoteRepo string,
 
 // getRemoteRepo get the remote repository name, used in proxy cache
 func getRemoteRepo(art lib.ArtifactInfo) string {
-	return strings.TrimPrefix(art.Repository, art.ProjectName+"/")
+	projectInfo := strings.Split(art.ProjectName, "__")
+	if len(projectInfo) == lenWithInstanceID {
+		return strings.TrimPrefix(art.Repository, projectInfo[0]+"__")
+	}
+
+	return art.Repository
 }
 
 func getReference(art lib.ArtifactInfo) string {

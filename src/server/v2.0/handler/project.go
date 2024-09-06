@@ -48,7 +48,6 @@ import (
 	"github.com/goharbor/harbor/src/pkg/project/metadata"
 	pkgModels "github.com/goharbor/harbor/src/pkg/project/models"
 	"github.com/goharbor/harbor/src/pkg/quota/types"
-	"github.com/goharbor/harbor/src/pkg/retention/policy"
 	"github.com/goharbor/harbor/src/pkg/robot"
 	userModels "github.com/goharbor/harbor/src/pkg/user/models"
 	"github.com/goharbor/harbor/src/server/v2.0/handler/model"
@@ -222,17 +221,17 @@ func (a *projectAPI) CreateProject(ctx context.Context, params operation.CreateP
 
 	// RegistryID is provided in the request body and it's valid,
 	// create a default retention policy for proxy project
-	if req.RegistryID != nil {
-		plc := policy.WithNDaysSinceLastPull(projectID, defaultDaysToRetentionForProxyCacheProject)
-		retentionID, err := a.retentionCtl.CreateRetention(ctx, plc)
-		if err != nil {
-			return a.SendError(ctx, err)
-		}
-		md := map[string]string{"retention_id": strconv.FormatInt(retentionID, 10)}
-		if err := a.metadataMgr.Add(ctx, projectID, md); err != nil {
-			return a.SendError(ctx, err)
-		}
-	}
+	//if req.RegistryID != nil {
+	//	plc := policy.WithNDaysSinceLastPull(projectID, defaultDaysToRetentionForProxyCacheProject)
+	//	retentionID, err := a.retentionCtl.CreateRetention(ctx, plc)
+	//	if err != nil {
+	//		return a.SendError(ctx, err)
+	//	}
+	//	md := map[string]string{"retention_id": strconv.FormatInt(retentionID, 10)}
+	//	if err := a.metadataMgr.Add(ctx, projectID, md); err != nil {
+	//		return a.SendError(ctx, err)
+	//	}
+	//}
 
 	var location string
 	if lib.BoolValue(params.XResourceNameInLocation) {

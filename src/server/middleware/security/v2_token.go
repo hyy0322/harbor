@@ -16,7 +16,8 @@ import (
 
 type v2TokenClaims struct {
 	v2.Claims
-	Access []*registry_token.ResourceActions `json:"access"`
+	Parameters map[string]string                 `json:"parameters,omitempty"`
+	Access     []*registry_token.ResourceActions `json:"access"`
 }
 
 func (vtc *v2TokenClaims) Valid() error {
@@ -61,5 +62,5 @@ func (vt *v2Token) Generate(req *http.Request) security.Context {
 		logger.Warningf("invalid token claims.")
 		return nil
 	}
-	return v2token.New(req.Context(), claims.Subject, claims.Access)
+	return v2token.NewExtendedContext(v2token.New(req.Context(), claims.Subject, claims.Access), claims.Parameters)
 }

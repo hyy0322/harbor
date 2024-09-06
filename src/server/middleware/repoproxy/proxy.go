@@ -23,14 +23,18 @@ import (
 
 	"github.com/goharbor/harbor/src/common/security"
 	"github.com/goharbor/harbor/src/common/security/proxycachesecret"
+	"github.com/goharbor/harbor/src/common/security/v2token"
 	"github.com/goharbor/harbor/src/controller/project"
 	"github.com/goharbor/harbor/src/controller/proxy"
 	"github.com/goharbor/harbor/src/controller/registry"
+	"github.com/goharbor/harbor/src/controller/repository"
+	"github.com/goharbor/harbor/src/controller/tag"
 	"github.com/goharbor/harbor/src/lib"
 	"github.com/goharbor/harbor/src/lib/errors"
 	httpLib "github.com/goharbor/harbor/src/lib/http"
 	"github.com/goharbor/harbor/src/lib/log"
 	"github.com/goharbor/harbor/src/lib/orm"
+	"github.com/goharbor/harbor/src/lib/q"
 	proModels "github.com/goharbor/harbor/src/pkg/project/models"
 	"github.com/goharbor/harbor/src/pkg/reg/model"
 	"github.com/goharbor/harbor/src/server/middleware"
@@ -106,16 +110,64 @@ func ManifestMiddleware() func(http.Handler) http.Handler {
 	})
 }
 
+func reachTagLimit(ctx context.Context, art lib.ArtifactInfo, limit int64) bool {
+	if limit <= 0 {
+		return false
+	}
+
+	r, err := repository.Ctl.GetByName(ctx, art.Repository)
+	if err != nil {
+		return false
+	}
+
+	if count, err := tag.Ctl.Count(ctx, q.New(q.KeyWords{"RepositoryID": r.RepositoryID, "Name": art.Tag})); err != nil {
+		log.Errorf("failed to count tags for repository %s/%s, error: %v", art.Repository, art.Tag, err)
+		return false
+	} else if count == 1 {
+		return false
+	}
+
+	if count, err := tag.Ctl.Count(ctx, q.New(q.KeyWords{"RepositoryID": r.RepositoryID})); err != nil {
+		log.Errorf("failed to count tags for repository %s, error: %v", art.Repository, err)
+		return false
+	} else if count < limit {
+		log.Debugf("repository %s has not reach tag limit %d/%d", art.Repository, count, limit)
+		return false
+	}
+
+	log.Errorf("repository %s reach tag limit %d", art.Repository, limit)
+
+	return true
+}
+
+func disableManifestGetWhenTagLimited(ctx context.Context, art lib.ArtifactInfo) error {
+	if art.Tag == "" {
+		return nil
+	}
+
+	if reachTagLimit(ctx, art, v2token.GetTagLimit(ctx)) {
+		return errors.DeniedError(
+			errors.Errorf("reach repository tag limit: %v", art.Repository))
+	}
+	return nil
+}
+
 func handleManifest(w http.ResponseWriter, r *http.Request, next http.Handler) error {
 	ctx := r.Context()
 	art, p, proxyCtl, err := preCheck(ctx)
 	if err != nil {
 		return err
 	}
-	if !canProxy(r.Context(), p) {
+	// 如果是ProxySession，是为了确认harbor中是否存在该manifest，因此直接fallback to local
+	if !canProxy(r.Context(), p) || isProxySession(ctx) {
 		next.ServeHTTP(w, r)
 		return nil
 	}
+
+	if disableManifestGetWhenTagLimited(ctx, art) != nil {
+		return err
+	}
+
 	remote, err := proxy.NewRemoteHelper(r.Context(), p.RegistryID)
 	if err != nil {
 		return err

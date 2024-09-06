@@ -3,6 +3,7 @@ package v2token
 import (
 	"context"
 	rbac_project "github.com/goharbor/harbor/src/common/rbac/project"
+	"strconv"
 	"strings"
 
 	registry_token "github.com/docker/distribution/registry/auth/token"
@@ -119,4 +120,60 @@ func New(ctx context.Context, name string, access []*registry_token.ResourceActi
 		accessMap: m,
 		ctl:       project.Ctl,
 	}
+}
+
+const (
+	TagLimit  = "tag_limit"
+	Unlimited = -1
+)
+
+type extendedContext struct {
+	security.Context
+	parameters map[string]string
+}
+
+type ExtendedContext interface {
+	security.Context
+	GetParameters() map[string]string
+}
+
+func (c *extendedContext) GetParameters() map[string]string {
+	return c.parameters
+}
+
+func NewExtendedContext(ctx security.Context, parameters map[string]string) security.Context {
+	return &extendedContext{
+		Context:    ctx,
+		parameters: parameters,
+	}
+}
+
+func GetTagLimit(ctx context.Context) int64 {
+	sc, ok := security.FromContext(ctx)
+	if !ok {
+		log.Error("Failed to get security context")
+		return Unlimited
+	}
+
+	c, ok := sc.(ExtendedContext)
+	if !ok {
+		return Unlimited
+	}
+
+	t := c.GetParameters()
+	if t == nil {
+		return Unlimited
+	}
+
+	tagLimitStr, ok := t[TagLimit]
+	if !ok {
+		return Unlimited
+	}
+
+	limit, err := strconv.ParseInt(tagLimitStr, 10, 64)
+	if err != nil {
+		return Unlimited
+	}
+
+	return limit
 }
