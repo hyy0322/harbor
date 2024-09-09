@@ -47,6 +47,8 @@ const (
 	etag                = "Etag"
 	ensureTagInterval   = 10 * time.Second
 	ensureTagMaxRetry   = 60
+
+	httpHeaderTrafficFromSource = "X-Volc-Cr-Traffic-From-Source"
 )
 
 // BlobGetMiddleware handle get blob request
@@ -74,6 +76,7 @@ func handleBlob(w http.ResponseWriter, r *http.Request, next http.Handler) error
 	}
 	defer reader.Close()
 	// Use io.CopyN to avoid out of memory when pulling big blob
+	setHeaders(w, size, "", art.Digest)
 	written, err := io.CopyN(w, reader, size)
 	if err != nil {
 		return err
@@ -81,7 +84,6 @@ func handleBlob(w http.ResponseWriter, r *http.Request, next http.Handler) error
 	if written != size {
 		return errors.Errorf("The size mismatch, actual:%d, expected: %d", written, size)
 	}
-	setHeaders(w, size, "", art.Digest)
 	return nil
 }
 
@@ -249,6 +251,7 @@ func setHeaders(w http.ResponseWriter, size int64, mediaType string, dig string)
 	}
 	h.Set(dockerContentDigest, dig)
 	h.Set(etag, dig)
+	w.Header().Set(httpHeaderTrafficFromSource, "true")
 }
 
 // isProxySession check if current security context is proxy session
