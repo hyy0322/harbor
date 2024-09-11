@@ -1,4 +1,4 @@
-FROM hub.byted.org/infcplibrary/golang:1.17.10-security-auth as builder
+FROM hub.byted.org/infcplibrary/golang:1.20.14-bullseye-security as builder
 
 WORKDIR /registry
 COPY ./make/photon/registry/builder.new /registry/builder
