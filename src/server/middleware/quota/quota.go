@@ -67,18 +67,25 @@ func RequestMiddleware(config RequestConfig, skippers ...middleware.Skipper) fun
 			return
 		}
 
-		reference, referenceID, err := config.ReferenceObject(r)
-		if err != nil {
-			logger.Errorf("get reference object failed, error: %v", err)
-
-			lib_http.SendError(w, err)
-			return
-		}
-
-		enabled, err := quotaController.IsEnabled(r.Context(), reference, referenceID)
-		if err != nil {
-			logger.Errorf("check whether quota enabled for %s %s failed, error: %v", reference, referenceID, err)
-			lib_http.SendError(w, err)
+		var (
+			reference, referenceID string
+			enabled                bool
+		)
+		if err := lib.RetryOperation(func() error {
+			var retryErr error
+			reference, referenceID, retryErr = config.ReferenceObject(r)
+			if retryErr != nil {
+				logger.Errorf("get reference object failed, error: %v, will retry", retryErr)
+				return retryErr
+			}
+			enabled, retryErr = quotaController.IsEnabled(r.Context(), reference, referenceID)
+			if retryErr != nil {
+				logger.Errorf("check whether quota enabled for %s %s failed, error: %v, will retry", reference, referenceID, retryErr)
+				return retryErr
+			}
+			return nil
+		}, 7); err != nil {
+			logger.Errorf("retry error: %v", err)
 			return
 		}
 
@@ -89,11 +96,17 @@ func RequestMiddleware(config RequestConfig, skippers ...middleware.Skipper) fun
 			return
 		}
 
-		resources, err := config.Resources(r, reference, referenceID)
-		if err != nil {
-			logger.Errorf("get resources failed, error: %v", err)
-
-			lib_http.SendError(w, err)
+		var resources types.ResourceList
+		if err := lib.RetryOperation(func() error {
+			var retryErr error
+			resources, retryErr = config.Resources(r, reference, referenceID)
+			if retryErr != nil {
+				logger.Errorf("get resources failed, error: %v", retryErr)
+				return retryErr
+			}
+			return nil
+		}, 7); err != nil {
+			logger.Errorf("retry error: %v", err)
 			return
 		}
 
@@ -110,7 +123,7 @@ func RequestMiddleware(config RequestConfig, skippers ...middleware.Skipper) fun
 			defer res.Flush()
 		}
 
-		err = quotaController.Request(r.Context(), reference, referenceID, resources, func() error {
+		err := quotaController.Request(r.Context(), reference, referenceID, resources, func() error {
 			next.ServeHTTP(res, r)
 			if !res.Success() {
 				return errNonSuccess

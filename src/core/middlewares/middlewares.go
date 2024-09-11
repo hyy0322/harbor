@@ -18,7 +18,6 @@ import (
 	"net/http"
 	"regexp"
 
-	"github.com/beego/beego"
 	"github.com/goharbor/harbor/src/pkg/distribution"
 	"github.com/goharbor/harbor/src/server/middleware"
 	"github.com/goharbor/harbor/src/server/middleware/artifactinfo"
@@ -35,6 +34,8 @@ import (
 	"github.com/goharbor/harbor/src/server/middleware/trace"
 	"github.com/goharbor/harbor/src/server/middleware/transaction"
 	"github.com/goharbor/harbor/src/server/middleware/url"
+
+	"github.com/beego/beego"
 )
 
 var (
@@ -75,6 +76,26 @@ var (
 		middleware.MethodAndPathSkipper(http.MethodPost, match("^/service/notifications/jobs/webhook/"+numericRegexp.String())),
 		pingSkipper,
 	}
+
+	retrySkippers = []middleware.Skipper{
+		middleware.MethodAndPathSkipper(http.MethodGet, match("^/api/.*")),
+		middleware.MethodAndPathSkipper(http.MethodPost, match("^/api/.*")),
+		middleware.MethodAndPathSkipper(http.MethodPut, match("^/api/.*")),
+		middleware.MethodAndPathSkipper(http.MethodDelete, match("^/api/.*")),
+
+		middleware.MethodAndPathSkipper(http.MethodGet, match("^/c/.*")),
+		middleware.MethodAndPathSkipper(http.MethodPost, match("^/c/.*")),
+		middleware.MethodAndPathSkipper(http.MethodPut, match("^/c/.*")),
+		middleware.MethodAndPathSkipper(http.MethodDelete, match("^/c/.*")),
+
+		middleware.MethodAndPathSkipper(http.MethodGet, match("^/service/.*")),
+		middleware.MethodAndPathSkipper(http.MethodPost, match("^/service/.*")),
+		middleware.MethodAndPathSkipper(http.MethodPut, match("^/service/.*")),
+		middleware.MethodAndPathSkipper(http.MethodDelete, match("^/service/.*")),
+
+		middleware.MethodAndPathSkipper(http.MethodPatch, distribution.BlobUploadURLRegexp),
+		middleware.MethodAndPathSkipper(http.MethodPut, distribution.BlobUploadURLRegexp),
+	}
 )
 
 // MiddleWares returns global middlewares
@@ -88,6 +109,7 @@ func MiddleWares() []beego.MiddleWare {
 		log.Middleware(),
 		session.Middleware(),
 		csrf.Middleware(),
+		middleware.RetryMiddleware(retrySkippers...),
 		orm.Middleware(pingSkipper),
 		notification.Middleware(pingSkipper), // notification must ahead of transaction ensure the DB transaction execution complete
 		transaction.Middleware(dbTxSkippers...),

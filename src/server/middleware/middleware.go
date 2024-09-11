@@ -15,10 +15,20 @@
 package middleware
 
 import (
+	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/goharbor/harbor/src/lib"
 	lib_http "github.com/goharbor/harbor/src/lib/http"
+	"github.com/goharbor/harbor/src/lib/log"
+)
+
+const (
+	databaseError57P01             = "57P01"
+	databaseError57P03             = "57P03"
+	databaseErrorConnectionRefused = "connection refused"
+	database                       = "database"
 )
 
 // Middleware receives a handler and returns another handler.
@@ -87,5 +97,32 @@ func AfterResponse(hook func(http.ResponseWriter, *http.Request, int) error, ski
 			res.Reset()
 			lib_http.SendError(res, err)
 		}
+	}, skippers...)
+}
+
+func RetryMiddleware(skippers ...Skipper) func(http.Handler) http.Handler {
+	return New(func(w http.ResponseWriter, r *http.Request, next http.Handler) {
+		res, ok := w.(*lib.ErrResponseBuffer)
+		if !ok {
+			res = lib.NewErrResponseBuffer(w, lib.NewResponseBuffer(w))
+			defer res.Flush()
+		}
+
+		if err := lib.RetryOperation(func() error {
+			res.Reset()
+			lib.NopCloseRequest(r)
+			next.ServeHTTP(res, r)
+			if strings.Contains(res.String(), databaseError57P01) ||
+				strings.Contains(res.String(), databaseError57P03) ||
+				(strings.Contains(res.String(), database) && strings.Contains(res.String(), databaseErrorConnectionRefused)) {
+				log.Errorf("database error: %s, will retry", res.String())
+				return fmt.Errorf(res.String())
+			}
+			return nil
+		}, 7); err != nil {
+			log.Errorf("retry error: %v", err)
+			return
+		}
+
 	}, skippers...)
 }

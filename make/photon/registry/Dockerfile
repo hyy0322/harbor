@@ -9,7 +9,7 @@ ARG CODEBASE
 ENV GIT_SSH_COMMAND $CODEBASE
 
 RUN chmod 755 /registry/builder && \
-    /registry/builder release-v2.8
+    /registry/builder feat-registry-token-service
 
 FROM hub.byted.org/base/security.photon40:latest
 

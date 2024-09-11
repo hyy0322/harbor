@@ -97,6 +97,10 @@ func (r *ResponseBuffer) Reset() error {
 	return nil
 }
 
+func (r *ResponseBuffer) String() string {
+	return r.buffer.String()
+}
+
 // StatusCode returns the status code
 func (r *ResponseBuffer) StatusCode() int {
 	if r.code == 0 {
@@ -105,4 +109,56 @@ func (r *ResponseBuffer) StatusCode() int {
 		return http.StatusOK
 	}
 	return r.code
+}
+
+type ErrResponseBuffer struct {
+	w  http.ResponseWriter
+	wb *ResponseBuffer
+}
+
+func NewErrResponseBuffer(w http.ResponseWriter, wb *ResponseBuffer) *ErrResponseBuffer {
+	return &ErrResponseBuffer{
+		w:  w,
+		wb: wb,
+	}
+}
+
+// WriteHeader writes the status code into the buffer without writing to the underlying response writer
+func (r *ErrResponseBuffer) WriteHeader(statusCode int) {
+	r.wb.WriteHeader(statusCode)
+}
+
+// Write writes the data into the buffer without writing to the underlying response writer
+func (r *ErrResponseBuffer) Write(data []byte) (int, error) {
+	if !r.wb.Success() {
+		return r.wb.Write(data)
+	}
+	header := r.w.Header()
+	for k, vs := range r.wb.header {
+		for _, v := range vs {
+			header.Add(k, v)
+		}
+	}
+	if r.wb.code > 0 {
+		r.w.WriteHeader(r.wb.code)
+	}
+	return r.w.Write(data)
+}
+
+// Header returns the header of the buffer
+func (r *ErrResponseBuffer) Header() http.Header {
+	return r.wb.Header()
+}
+
+// Flush the status code, header and data into the underlying response writer
+func (r *ErrResponseBuffer) Flush() (int, error) {
+	return r.wb.Flush()
+}
+
+func (r *ErrResponseBuffer) String() string {
+	return r.wb.String()
+}
+
+func (r *ErrResponseBuffer) Reset() error {
+	return r.wb.Reset()
 }

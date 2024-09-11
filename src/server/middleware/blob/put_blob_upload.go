@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/goharbor/harbor/src/lib"
 	"github.com/goharbor/harbor/src/lib/log"
 	"github.com/goharbor/harbor/src/lib/orm"
 	"github.com/goharbor/harbor/src/pkg/distribution"
@@ -35,7 +36,17 @@ func PutBlobUploadMiddleware() func(http.Handler) http.Handler {
 	before := middleware.BeforeRequest(func(r *http.Request) error {
 		v := r.URL.Query()
 		digest := v.Get("digest")
-		return probeBlob(r, digest)
+		if err := lib.RetryOperation(func() error {
+			retryErr := probeBlob(r, digest)
+			if retryErr != nil {
+				log.Errorf("probeBlob error: %v, will retry", retryErr)
+			}
+			return nil
+		}, 7); err != nil {
+			log.Errorf("retry error: %v", err)
+			return err
+		}
+		return nil
 	})
 
 	after := middleware.AfterResponse(func(w http.ResponseWriter, r *http.Request, statusCode int) error {
@@ -78,7 +89,17 @@ func PutBlobUploadMiddleware() func(http.Handler) http.Handler {
 			return nil
 		}
 
-		return orm.WithTransaction(h)(orm.SetTransactionOpNameToContext(ctx, "tx-put-blob-mw"))
+		if err := lib.RetryOperation(func() error {
+			retryErr := orm.WithTransaction(h)(orm.SetTransactionOpNameToContext(ctx, "tx-put-blob-mw"))
+			if retryErr != nil {
+				log.Errorf("tx-put-blob-mw error: %v, will retry", retryErr)
+			}
+			return nil
+		}, 7); err != nil {
+			log.Errorf("retry error: %v", err)
+			return err
+		}
+		return nil
 	})
 
 	return middleware.Chain(before, after)
