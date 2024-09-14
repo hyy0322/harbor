@@ -123,11 +123,11 @@ func NewClientWithAuthorizer(url string, authorizer lib.Authorizer, insecure boo
 	}
 }
 
-// NewClientWithTransport new client with customized transport
+// NewClientWithTransport new client with customized transport, the specific transport will also be used in authorizer
 func NewClientWithTransport(url, username, password string, insecure bool, transport *http.Transport) Client {
 	return &client{
 		url:        url,
-		authorizer: auth.NewAuthorizer(username, password, insecure),
+		authorizer: auth.NewAuthorizerWithTransport(username, password, insecure, transport),
 		client: &http.Client{
 			Transport: transport,
 			Timeout:   30 * time.Minute,

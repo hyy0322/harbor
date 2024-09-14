@@ -41,6 +41,18 @@ func NewAuthorizer(username, password string, insecure bool) lib.Authorizer {
 	}
 }
 
+// NewAuthorizerWithTransport allows to use specific transport in http client
+func NewAuthorizerWithTransport(username, password string, insecure bool, transport *http.Transport) lib.Authorizer {
+	transport.TLSClientConfig.InsecureSkipVerify = insecure
+	return &authorizer{
+		username: username,
+		password: password,
+		client: &http.Client{
+			Transport: transport,
+		},
+	}
+}
+
 // authorizer authorizes the request with the provided credential.
 // It determines the auth scheme of registry automatically and calls
 // different underlying authorizers to do the auth work
