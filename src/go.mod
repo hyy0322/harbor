@@ -9,7 +9,7 @@ require (
 	github.com/asaskevich/govalidator v0.0.0-20210307081110-f21760c49a8d
 	github.com/aws/aws-sdk-go v1.34.28
 	github.com/beego/i18n v0.0.0-20140604031826-e87155e8f0c0
-	github.com/bmatcuk/doublestar v1.1.1
+	github.com/bmatcuk/doublestar v1.3.4
 	github.com/casbin/casbin v1.7.0
 	github.com/cenkalti/backoff/v4 v4.1.1
 	github.com/coreos/go-oidc/v3 v3.0.0
