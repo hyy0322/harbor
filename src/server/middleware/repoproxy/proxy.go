@@ -166,7 +166,7 @@ func handleManifest(w http.ResponseWriter, r *http.Request, next http.Handler) e
 		return nil
 	}
 
-	if disableManifestGetWhenTagLimited(ctx, art) != nil {
+	if err = disableManifestGetWhenTagLimited(ctx, art); err != nil {
 		return err
 	}
 
