@@ -34,7 +34,8 @@ func NewClient(registry *model.Registry) *Client {
 		password: registry.Credential.AccessSecret,
 		client: common_http.NewClient(
 			&http.Client{
-				Transport: common_http.GetHTTPTransport(common_http.WithInsecure(registry.Insecure)),
+				Transport: common_http.NewProxyTransport(registry.VpcId, registry.HttpProxy, registry.HttpsProxy, registry.NoProxy,
+					registry.Insecure),
 			}),
 	}
 	return client

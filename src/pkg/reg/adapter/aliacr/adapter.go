@@ -48,6 +48,7 @@ func getRegion(url string) (region string, err error) {
 	return rs[2], nil
 }
 
+// only support personal registry, we will not adapt it
 func newAdapter(registry *model.Registry) (*adapter, error) {
 	region, err := getRegion(registry.URL)
 	if err != nil {

@@ -52,6 +52,26 @@ func Ping(registry *model.Registry) (string, string, error) {
 	return "", "", errors.New(nil).WithCode(errors.ChallengesUnsupportedCode).WithMessage("bearer auth scheme isn't supported: %v", challenges)
 }
 
+// PingWithProxy ...
+func PingWithProxy(registry *model.Registry) (string, string, error) {
+	client := &http.Client{
+		Transport: commonhttp.NewProxyTransport(registry.VpcId, registry.HttpProxy, registry.HttpsProxy, registry.NoProxy, registry.Insecure),
+	}
+
+	resp, err := client.Get(registry.URL + "/v2/")
+	if err != nil {
+		return "", "", err
+	}
+	defer resp.Body.Close()
+	challenges := challenge.ResponseChallenges(resp)
+	for _, challenge := range challenges {
+		if challenge.Scheme == "bearer" {
+			return challenge.Parameters["realm"], challenge.Parameters["service"], nil
+		}
+	}
+	return "", "", errors.New(nil).WithCode(errors.ChallengesUnsupportedCode).WithMessage("bearer auth scheme isn't supported: %v", challenges)
+}
+
 // ParseRepository parses the "repository" provided into two parts: namespace and the rest
 // the string before the last "/" is the namespace part
 // c -> [,c]

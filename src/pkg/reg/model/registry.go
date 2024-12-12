@@ -102,6 +102,11 @@ type Registry struct {
 	Status          string      `json:"status"`
 	CreationTime    time.Time   `json:"creation_time"`
 	UpdateTime      time.Time   `json:"update_time"`
+	VpcId           string      `json:"vpc_id"`
+	HttpProxy       string      `json:"http_proxy"`
+	HttpsProxy      string      `json:"https_proxy"`
+	NoProxy         string      `json:"no_proxy"`
+	SkipVerify      bool        `json:"skip_verify"`
 }
 
 // FilterStyle ...

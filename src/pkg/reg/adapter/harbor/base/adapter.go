@@ -34,6 +34,8 @@ import (
 
 // New creates an instance of the base adapter
 func New(registry *model.Registry) (*Adapter, error) {
+	var transport = common_http.NewProxyTransport(registry.VpcId,
+		registry.HttpProxy, registry.HttpsProxy, registry.NoProxy, registry.Insecure)
 	if isLocalHarbor(registry.URL) {
 		authorizer := common_http_auth.NewSecretAuthorizer(registry.Credential.AccessSecret)
 		httpClient := common_http.NewClient(&http.Client{
@@ -41,14 +43,14 @@ func New(registry *model.Registry) (*Adapter, error) {
 			// core, so insecure transport is ok
 			// If using the secure one, as we'll replace the URL with 127.0.0.1 and this will
 			// cause error "x509: cannot validate certificate for 127.0.0.1 because it doesn't contain any IP SANs"
-			Transport: common_http.GetHTTPTransport(common_http.WithInsecure(true)),
+			Transport: transport,
 		}, authorizer)
 		client, err := NewClient(registry.URL, httpClient)
 		if err != nil {
 			return nil, err
 		}
 		return &Adapter{
-			Adapter:    native.NewAdapterWithAuthorizer(registry, authorizer),
+			Adapter:    native.NewAdapterWithAuthorizerWithRoundTripper(registry, authorizer, transport),
 			Registry:   registry,
 			Client:     client,
 			url:        registry.URL,
@@ -63,14 +65,14 @@ func New(registry *model.Registry) (*Adapter, error) {
 			registry.Credential.AccessSecret))
 	}
 	httpClient := common_http.NewClient(&http.Client{
-		Transport: common_http.GetHTTPTransport(common_http.WithInsecure(registry.Insecure)),
+		Transport: transport,
 	}, authorizers...)
 	client, err := NewClient(registry.URL, httpClient)
 	if err != nil {
 		return nil, err
 	}
 	return &Adapter{
-		Adapter:    native.NewAdapter(registry),
+		Adapter:    native.NewAdapterWithRoundTripper(registry, transport),
 		Registry:   registry,
 		Client:     client,
 		url:        registry.URL,

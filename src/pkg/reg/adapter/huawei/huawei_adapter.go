@@ -269,9 +269,10 @@ func newAdapter(registry *model.Registry) (adp.Adapter, error) {
 		modifiers = append(modifiers, authorizer)
 	}
 
-	transport := common_http.GetHTTPTransport(common_http.WithInsecure(registry.Insecure))
+	transport := common_http.NewProxyTransport(registry.VpcId,
+		registry.HttpProxy, registry.HttpsProxy, registry.NoProxy, registry.Insecure)
 	return &adapter{
-		Adapter:  native.NewAdapter(registry),
+		Adapter:  native.NewAdapterWithRoundTripper(registry, transport),
 		registry: registry,
 		client: common_http.NewClient(
 			&http.Client{

@@ -17,6 +17,7 @@ package googlegcr
 import (
 	"encoding/json"
 	"fmt"
+	commonhttp "github.com/goharbor/harbor/src/common/http"
 	"github.com/goharbor/harbor/src/lib/errors"
 	"github.com/goharbor/harbor/src/lib/log"
 	adp "github.com/goharbor/harbor/src/pkg/reg/adapter"
@@ -38,7 +39,8 @@ func init() {
 func newAdapter(registry *model.Registry) *adapter {
 	return &adapter{
 		registry: registry,
-		Adapter:  native.NewAdapter(registry),
+		Adapter: native.NewAdapterWithRoundTripper(registry, commonhttp.NewProxyTransport(registry.VpcId,
+			registry.HttpProxy, registry.HttpsProxy, registry.NoProxy, registry.Insecure)),
 	}
 }
 

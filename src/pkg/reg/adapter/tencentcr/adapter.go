@@ -96,7 +96,7 @@ func newAdapter(registry *model.Registry) (a *adapter, err error) {
 		}
 	}
 
-	realm, service, err := util.Ping(registry)
+	realm, service, err := util.PingWithProxy(registry)
 	log.Debugf("[tencent-tcr.newAdapter] realm=%s, service=%s error=%v", realm, service, err)
 	if err != nil {
 		log.Errorf("[tencent-tcr.newAdapter] ping failed. error=%v", err)
@@ -136,17 +136,18 @@ func newAdapter(registry *model.Registry) (a *adapter, err error) {
 		registry.URL, registryURL.Host, *instanceInfo.PublicDomain, *instanceInfo.RegionName, *instanceInfo.RegistryId)
 
 	// rebuild TCR SDK client
+	var transport = commonhttp.NewProxyTransport(registry.VpcId,
+		registry.HttpProxy, registry.HttpsProxy, registry.NoProxy, registry.Insecure)
 	client = &tcr.Client{}
 	client.Init(*instanceInfo.RegionName).
 		WithCredential(tcrCredential).
 		WithProfile(cfp).
-		WithHttpTransport(newRateLimitedTransport(tcrQPSLimit, http.DefaultTransport))
+		WithHttpTransport(newRateLimitedTransport(tcrQPSLimit, transport))
 	if err != nil {
 		return
 	}
 
 	var credential = NewAuth(instanceInfo.RegistryId, client)
-	var transport = commonhttp.GetHTTPTransport(commonhttp.WithInsecure(registry.Insecure))
 	var authorizer = bearer.NewAuthorizer(realm, service, credential, transport)
 
 	return &adapter{
@@ -161,7 +162,7 @@ func newAdapter(registry *model.Registry) (a *adapter, err error) {
 			},
 			credential,
 		),
-		Adapter: native.NewAdapterWithAuthorizer(registry, authorizer),
+		Adapter: native.NewAdapterWithAuthorizerWithRoundTripper(registry, authorizer, transport),
 	}, nil
 }
 

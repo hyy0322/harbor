@@ -38,6 +38,10 @@ type Registry struct {
 	Status         string    `orm:"column(health)"`
 	CreationTime   time.Time `orm:"column(creation_time);auto_now_add"`
 	UpdateTime     time.Time `orm:"column(update_time);auto_now"`
+	VpcId          string    `orm:"column(vpc_id)"`
+	HttpProxy      string    `orm:"column(http_proxy)"`
+	HttpsProxy     string    `orm:"column(https_proxy)"`
+	NoProxy        string    `orm:"column(no_proxy)"`
 }
 
 // TableName is required by by beego orm to map Registry to table registry

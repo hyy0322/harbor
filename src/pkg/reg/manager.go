@@ -229,6 +229,10 @@ func fromDaoModel(registry *dao.Registry) (*model.Registry, error) {
 		Status:       registry.Status,
 		CreationTime: registry.CreationTime,
 		UpdateTime:   registry.UpdateTime,
+		HttpProxy:    registry.HttpProxy,
+		HttpsProxy:   registry.HttpsProxy,
+		NoProxy:      registry.NoProxy,
+		VpcId:        registry.VpcId,
 	}
 
 	if len(registry.AccessKey) != 0 {
@@ -263,6 +267,10 @@ func toDaoModel(registry *model.Registry) (*dao.Registry, error) {
 		Status:       registry.Status,
 		CreationTime: registry.CreationTime,
 		UpdateTime:   registry.UpdateTime,
+		HttpProxy:    registry.HttpProxy,
+		HttpsProxy:   registry.HttpsProxy,
+		VpcId:        registry.VpcId,
+		NoProxy:      registry.NoProxy,
 	}
 
 	if registry.Credential != nil && len(registry.Credential.AccessKey) != 0 {

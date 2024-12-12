@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 
+	commonhttp "github.com/goharbor/harbor/src/common/http"
 	"github.com/goharbor/harbor/src/common/utils"
 	"github.com/goharbor/harbor/src/lib/log"
 	adp "github.com/goharbor/harbor/src/pkg/reg/adapter"
@@ -31,15 +32,19 @@ func newAdapter(registry *model.Registry) (adp.Adapter, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	return &adapter{
 		client:   client,
 		registry: registry,
-		Adapter: native.NewAdapter(&model.Registry{
+		Adapter: native.NewAdapterWithRoundTripper(&model.Registry{
 			URL:        registryURL,
 			Credential: registry.Credential,
 			Insecure:   registry.Insecure,
-		}),
+			NoProxy:    registry.NoProxy,
+			HttpProxy:  registry.HttpProxy,
+			HttpsProxy: registry.HttpsProxy,
+			VpcId:      registry.VpcId,
+		}, commonhttp.NewProxyTransport(registry.VpcId,
+			registry.HttpProxy, registry.HttpsProxy, registry.NoProxy, registry.Insecure)),
 	}, nil
 }
 

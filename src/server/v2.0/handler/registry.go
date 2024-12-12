@@ -51,6 +51,10 @@ func (r *registryAPI) CreateRegistry(ctx context.Context, params operation.Creat
 		Type:        params.Registry.Type,
 		URL:         params.Registry.URL,
 		Insecure:    params.Registry.Insecure,
+		HttpProxy:   params.Registry.HTTPProxy,
+		HttpsProxy:  params.Registry.HTTPSProxy,
+		NoProxy:     params.Registry.NoProxy,
+		VpcId:       params.Registry.VpcID,
 	}
 	if params.Registry.Credential != nil {
 		registry.Credential = &model.Credential{
@@ -58,6 +62,9 @@ func (r *registryAPI) CreateRegistry(ctx context.Context, params operation.Creat
 			AccessKey:    params.Registry.Credential.AccessKey,
 			AccessSecret: params.Registry.Credential.AccessSecret,
 		}
+	}
+	if params.Registry.SkipVerify != nil {
+		registry.SkipVerify = *params.Registry.SkipVerify
 	}
 
 	id, err := r.ctl.Create(ctx, registry)
@@ -154,6 +161,21 @@ func (r *registryAPI) UpdateRegistry(ctx context.Context, params operation.Updat
 		if params.Registry.AccessSecret != nil {
 			registry.Credential.AccessSecret = *params.Registry.AccessSecret
 		}
+		if params.Registry.VpcID != nil {
+			registry.VpcId = *params.Registry.VpcID
+		}
+		if params.Registry.HTTPProxy != nil {
+			registry.HttpProxy = *params.Registry.HTTPProxy
+		}
+		if params.Registry.HTTPSProxy != nil {
+			registry.HttpsProxy = *params.Registry.HTTPSProxy
+		}
+		if params.Registry.NoProxy != nil {
+			registry.NoProxy = *params.Registry.NoProxy
+		}
+		if params.Registry.SkipVerify != nil {
+			registry.SkipVerify = *params.Registry.SkipVerify
+		}
 	}
 	if err := r.ctl.Update(ctx, registry); err != nil {
 		return r.SendError(ctx, err)
@@ -245,6 +267,30 @@ func (r *registryAPI) PingRegistry(ctx context.Context, params operation.PingReg
 				registry.Credential = &model.Credential{}
 			}
 			registry.Credential.AccessSecret = *params.Registry.AccessSecret
+		}
+		if params.Registry.NoProxy != nil {
+			_, err := lib.ValidateHTTPURL(*params.Registry.NoProxy)
+			if err != nil {
+				return r.SendError(ctx, err)
+			}
+			registry.NoProxy = *params.Registry.NoProxy
+		}
+		if params.Registry.HTTPProxy != nil {
+			_, err := lib.ValidateHTTPURL(*params.Registry.HTTPProxy)
+			if err != nil {
+				return r.SendError(ctx, err)
+			}
+			registry.HttpProxy = *params.Registry.HTTPProxy
+		}
+		if params.Registry.HTTPSProxy != nil {
+			_, err := lib.ValidateHTTPURL(*params.Registry.HTTPSProxy)
+			if err != nil {
+				return r.SendError(ctx, err)
+			}
+			registry.HttpsProxy = *params.Registry.HTTPSProxy
+		}
+		if params.Registry.VpcID != nil {
+			registry.VpcId = *params.Registry.VpcID
 		}
 	}
 

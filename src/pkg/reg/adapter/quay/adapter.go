@@ -74,7 +74,8 @@ func newAdapter(registry *model.Registry) (*adapter, error) {
 		}
 	}
 
-	nativeRegistryAdapter := native.NewAdapterWithAuthorizer(registry, tokenAuthorizer)
+	nativeRegistryAdapter := native.NewAdapterWithAuthorizerWithRoundTripper(registry, tokenAuthorizer, common_http.NewProxyTransport(registry.VpcId,
+		registry.HttpProxy, registry.HttpsProxy, registry.NoProxy, registry.Insecure))
 
 	if apiKeyAuthorizer != nil {
 		modifiers = append(modifiers, apiKeyAuthorizer)
@@ -86,7 +87,8 @@ func newAdapter(registry *model.Registry) (*adapter, error) {
 		registry:     registry,
 		client: common_http.NewClient(
 			&http.Client{
-				Transport: common_http.GetHTTPTransport(common_http.WithInsecure(registry.Insecure)),
+				Transport: common_http.NewProxyTransport(registry.VpcId,
+					registry.HttpProxy, registry.HttpsProxy, registry.NoProxy, registry.Insecure),
 			},
 			modifiers...,
 		),

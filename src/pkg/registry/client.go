@@ -135,6 +135,29 @@ func NewClientWithTransport(url, username, password string, insecure bool, trans
 	}
 }
 
+// NewClientWithRoundTripper new client with http roundTripper, the specific roundTripper will also be used in authorizer
+func NewClientWithRoundTripper(url, username, password string, insecure bool, transport http.RoundTripper) Client {
+	return &client{
+		url:        url,
+		authorizer: auth.NewAuthorizerWithRoundTripper(username, password, transport),
+		client: &http.Client{
+			Transport: transport,
+			Timeout:   30 * time.Minute,
+		},
+	}
+}
+
+// NewClientWithAuthorizerWithRoundTripper creates a registry client with the provided authorizer
+func NewClientWithAuthorizerWithRoundTripper(url string, authorizer lib.Authorizer, transport http.RoundTripper) Client {
+	return &client{
+		url:        url,
+		authorizer: authorizer,
+		client: &http.Client{
+			Transport: transport,
+		},
+	}
+}
+
 // NewClientWithAuthorizerWithTransport creates a registry client with the provided authorizer
 func NewClientWithAuthorizerWithTransport(url string, authorizer lib.Authorizer, transport *http.Transport) Client {
 	return &client{

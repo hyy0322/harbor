@@ -53,6 +53,17 @@ func NewAuthorizerWithTransport(username, password string, insecure bool, transp
 	}
 }
 
+// NewAuthorizerWithRoundTripper allows to use specific transport in http client
+func NewAuthorizerWithRoundTripper(username, password string, transport http.RoundTripper) lib.Authorizer {
+	return &authorizer{
+		username: username,
+		password: password,
+		client: &http.Client{
+			Transport: transport,
+		},
+	}
+}
+
 // authorizer authorizes the request with the provided credential.
 // It determines the auth scheme of registry automatically and calls
 // different underlying authorizers to do the auth work

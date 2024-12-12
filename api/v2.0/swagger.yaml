@@ -6690,6 +6690,22 @@ definitions:
         type: string
         format: date-time
         description: The update time of the policy.
+      http_proxy:
+        type: string
+        description: http proxy of the registry
+      https_proxy:
+        type: string
+        description: https proxy of the registry
+      no_proxy:
+        type: string
+        description: no proxy of the registry
+      vpc_id:
+        type: string
+        description: vpc id of the registry
+      skip_verify:
+        type: boolean
+        description: skip verify registry
+        x-nullable: true
   RegistryUpdate:
     type: object
     properties:
@@ -6720,6 +6736,26 @@ definitions:
       insecure:
         type: boolean
         description: Whether or not the certificate will be verified when Harbor tries to access the server.
+        x-nullable: true
+      http_proxy:
+        type: string
+        description: http proxy of the registry
+        x-nullable: true
+      https_proxy:
+        type: string
+        description: https proxy of the registry
+        x-nullable: true
+      no_proxy:
+        type: string
+        description: no proxy of the registry
+        x-nullable: true
+      vpc_id:
+        type: string
+        description: vpc id of the registry
+        x-nullable: true
+      skip_verify:
+        type: boolean
+        description: vpc id of the registry
         x-nullable: true
   RegistryPing:
     type: object
@@ -6752,6 +6788,22 @@ definitions:
       insecure:
         type: boolean
         description: Whether or not the certificate will be verified when Harbor tries to access the server.
+        x-nullable: true
+      http_proxy:
+        type: string
+        description: http proxy of the registry
+        x-nullable: true
+      https_proxy:
+        type: string
+        description: https proxy of the registry
+        x-nullable: true
+      no_proxy:
+        type: string
+        description: no proxy of the registry
+        x-nullable: true
+      vpc_id:
+        type: string
+        description: vpc id of the registry
         x-nullable: true
   RegistryInfo:
     type: object

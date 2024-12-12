@@ -32,7 +32,7 @@ type Client struct {
 // NewClient creates a new GitLab client.
 func NewClient(registry *model.Registry) (*Client, error) {
 
-	realm, _, err := util.Ping(registry)
+	realm, _, err := util.PingWithProxy(registry)
 	if err != nil && !liberrors.IsChallengesUnsupportedErr(err) {
 		return nil, err
 	}
@@ -49,7 +49,8 @@ func NewClient(registry *model.Registry) (*Client, error) {
 		token:    registry.Credential.AccessSecret,
 		client: common_http.NewClient(
 			&http.Client{
-				Transport: common_http.GetHTTPTransport(common_http.WithInsecure(registry.Insecure)),
+				Transport: common_http.NewProxyTransport(registry.VpcId,
+					registry.HttpProxy, registry.HttpsProxy, registry.NoProxy, registry.Insecure),
 			}),
 	}
 	return client, nil

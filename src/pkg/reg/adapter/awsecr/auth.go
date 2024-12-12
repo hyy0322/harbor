@@ -26,6 +26,7 @@ import (
 	commonhttp "github.com/goharbor/harbor/src/common/http"
 	"github.com/goharbor/harbor/src/common/http/modifier"
 	"github.com/goharbor/harbor/src/lib/log"
+	"github.com/goharbor/harbor/src/pkg/reg/model"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
@@ -90,7 +91,7 @@ func (a *awsAuthCredential) Modify(req *http.Request) error {
 	return nil
 }
 
-func getAwsSvc(region, accessKey, accessSecret string, insecure bool, forceEndpoint *string) (*awsecrapi.ECR, error) {
+func getAwsSvc(region, accessKey, accessSecret string, registry *model.Registry, forceEndpoint *string) (*awsecrapi.ECR, error) {
 	sess, err := session.NewSession()
 	if err != nil {
 		return nil, err
@@ -110,7 +111,8 @@ func getAwsSvc(region, accessKey, accessSecret string, insecure bool, forceEndpo
 		Credentials: cred,
 		Region:      &region,
 		HTTPClient: &http.Client{
-			Transport: commonhttp.GetHTTPTransport(commonhttp.WithInsecure(insecure)),
+			Transport: commonhttp.NewProxyTransport(registry.VpcId, registry.HttpProxy, registry.HttpsProxy, registry.NoProxy,
+				registry.Insecure),
 		},
 	}
 	if forceEndpoint != nil {

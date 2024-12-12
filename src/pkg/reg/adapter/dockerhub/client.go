@@ -26,7 +26,8 @@ func NewClient(registry *model.Registry) (*Client, error) {
 	client := &Client{
 		host: registry.URL,
 		client: &http.Client{
-			Transport: commonhttp.GetHTTPTransport(commonhttp.WithInsecure(registry.Insecure)),
+			Transport: commonhttp.NewProxyTransport(registry.VpcId, registry.HttpProxy, registry.HttpsProxy, registry.NoProxy,
+				registry.Insecure),
 		},
 	}
 

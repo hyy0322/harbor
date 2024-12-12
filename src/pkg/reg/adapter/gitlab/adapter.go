@@ -1,6 +1,7 @@
 package gitlab
 
 import (
+	commonhttp "github.com/goharbor/harbor/src/common/http"
 	"github.com/goharbor/harbor/src/lib/log"
 	adp "github.com/goharbor/harbor/src/pkg/reg/adapter"
 	"github.com/goharbor/harbor/src/pkg/reg/adapter/native"
@@ -53,7 +54,8 @@ func newAdapter(registry *model.Registry) (*adapter, error) {
 		registry:        registry,
 		url:             registry.URL,
 		clientGitlabAPI: client,
-		Adapter:         native.NewAdapter(registry),
+		Adapter: native.NewAdapterWithRoundTripper(registry, commonhttp.NewProxyTransport(registry.VpcId,
+			registry.HttpProxy, registry.HttpsProxy, registry.NoProxy, registry.Insecure)),
 	}, nil
 }
 

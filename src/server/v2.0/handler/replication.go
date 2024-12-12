@@ -469,6 +469,10 @@ func convertRegistry(registry *model.Registry) *models.Registry {
 		Type:         string(registry.Type),
 		UpdateTime:   strfmt.DateTime(registry.UpdateTime),
 		URL:          registry.URL,
+		HTTPProxy:    registry.HttpProxy,
+		HTTPSProxy:   registry.HttpsProxy,
+		NoProxy:      registry.NoProxy,
+		VpcID:        registry.VpcId,
 	}
 	if registry.Credential != nil {
 		credential := &models.RegistryCredential{

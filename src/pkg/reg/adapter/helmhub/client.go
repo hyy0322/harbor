@@ -23,7 +23,8 @@ type Client struct {
 func NewClient(registry *model.Registry) *Client {
 	return &Client{
 		client: &http.Client{
-			Transport: commonhttp.GetHTTPTransport(commonhttp.WithInsecure(registry.Insecure)),
+			Transport: commonhttp.NewProxyTransport(registry.VpcId,
+				registry.HttpProxy, registry.HttpsProxy, registry.NoProxy, registry.Insecure),
 		},
 	}
 }

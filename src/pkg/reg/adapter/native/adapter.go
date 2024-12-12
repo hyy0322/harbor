@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"net/http"
 
+	commonhttp "github.com/goharbor/harbor/src/common/http"
 	"github.com/goharbor/harbor/src/common/utils"
 	"github.com/goharbor/harbor/src/lib"
 	"github.com/goharbor/harbor/src/lib/errors"
@@ -43,7 +44,8 @@ type factory struct{}
 
 // Create ...
 func (f *factory) Create(r *model.Registry) (adp.Adapter, error) {
-	return NewAdapter(r), nil
+	transport := commonhttp.NewProxyTransport(r.VpcId, r.HttpProxy, r.HttpsProxy, r.NoProxy, r.Insecure)
+	return NewAdapterWithRoundTripper(r, transport), nil
 }
 
 // AdapterPattern ...
@@ -96,6 +98,27 @@ func NewAdapterWithTransport(reg *model.Registry, transport *http.Transport) *Ad
 		password = reg.Credential.AccessSecret
 	}
 	adapter.Client = registry.NewClientWithTransport(reg.URL, username, password, reg.Insecure, transport)
+	return adapter
+}
+
+func NewAdapterWithRoundTripper(reg *model.Registry, transport http.RoundTripper) *Adapter {
+	adapter := &Adapter{
+		registry: reg,
+	}
+	username, password := "", ""
+	if reg.Credential != nil {
+		username = reg.Credential.AccessKey
+		password = reg.Credential.AccessSecret
+	}
+	adapter.Client = registry.NewClientWithRoundTripper(reg.URL, username, password, reg.Insecure, transport)
+	return adapter
+}
+
+func NewAdapterWithAuthorizerWithRoundTripper(reg *model.Registry, authorizer lib.Authorizer, transport http.RoundTripper) *Adapter {
+	adapter := &Adapter{
+		registry: reg,
+	}
+	adapter.Client = registry.NewClientWithAuthorizerWithRoundTripper(reg.URL, authorizer, transport)
 	return adapter
 }
 

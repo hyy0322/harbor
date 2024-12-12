@@ -92,16 +92,37 @@ func (c *controller) validate(ctx context.Context, registry *model.Registry) err
 	if err != nil {
 		return err
 	}
+	if len(registry.HttpsProxy) != 0 {
+		_, err := lib.ValidateHTTPURL(registry.HttpsProxy)
+		if err != nil {
+			return err
+		}
+	}
+	if len(registry.HttpProxy) != 0 {
+		_, err := lib.ValidateHTTPURL(registry.HttpProxy)
+		if err != nil {
+			return err
+		}
+	}
+	if len(registry.NoProxy) != 0 {
+		_, err := lib.ValidateHTTPURL(registry.NoProxy)
+		if err != nil {
+			return err
+		}
+	}
 	registry.URL = url
 
 	healthy, err := c.IsHealthy(ctx, registry)
 	if err != nil {
 		return err
 	}
-	if !healthy {
-		return errors.New(nil).WithCode(errors.BadRequestCode).WithMessage("the registry is unhealthy")
-	}
 	registry.Status = model.Healthy
+	if !healthy {
+		registry.Status = model.Unhealthy
+		if !registry.SkipVerify {
+			return errors.New(nil).WithCode(errors.BadRequestCode).WithMessage("the registry is unhealthy")
+		}
+	}
 	return nil
 }
 

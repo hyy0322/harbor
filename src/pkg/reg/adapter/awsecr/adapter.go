@@ -21,6 +21,7 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	awsecrapi "github.com/aws/aws-sdk-go/service/ecr"
+	commonhttp "github.com/goharbor/harbor/src/common/http"
 	"github.com/goharbor/harbor/src/lib/log"
 	adp "github.com/goharbor/harbor/src/pkg/reg/adapter"
 	"github.com/goharbor/harbor/src/pkg/reg/adapter/native"
@@ -49,14 +50,15 @@ func newAdapter(registry *model.Registry) (*adapter, error) {
 		return nil, err
 	}
 	svc, err := getAwsSvc(
-		region, registry.Credential.AccessKey, registry.Credential.AccessSecret, registry.Insecure, nil)
+		region, registry.Credential.AccessKey, registry.Credential.AccessSecret, registry, nil)
 	if err != nil {
 		return nil, err
 	}
 	authorizer := NewAuth(registry.Credential.AccessKey, svc)
 	return &adapter{
 		registry: registry,
-		Adapter:  native.NewAdapterWithAuthorizer(registry, authorizer),
+		Adapter: native.NewAdapterWithAuthorizerWithRoundTripper(registry, authorizer,
+			commonhttp.NewProxyTransport(registry.VpcId, registry.HttpProxy, registry.HttpsProxy, registry.NoProxy, registry.Insecure)),
 		cacheSvc: svc,
 	}, nil
 }

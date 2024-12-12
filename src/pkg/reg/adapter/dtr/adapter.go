@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	commonhttp "github.com/goharbor/harbor/src/common/http"
 	"github.com/goharbor/harbor/src/common/utils"
 	"github.com/goharbor/harbor/src/lib/log"
 	adp "github.com/goharbor/harbor/src/pkg/reg/adapter"
@@ -53,7 +54,8 @@ func newAdapter(registry *model.Registry) *adapter {
 		registry:     registry,
 		url:          registry.URL,
 		clientDTRAPI: NewClient(registry),
-		Adapter:      native.NewAdapter(registry),
+		Adapter: native.NewAdapterWithRoundTripper(registry, commonhttp.NewProxyTransport(registry.VpcId,
+			registry.HttpProxy, registry.HttpsProxy, registry.NoProxy, registry.Insecure)),
 	}
 }
 

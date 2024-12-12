@@ -100,7 +100,8 @@ func (a *adapter) Info() (info *model.RegistryInfo, err error) {
 
 func newAdapter(registry *model.Registry) (adp.Adapter, error) {
 	return &adapter{
-		Adapter:  native.NewAdapter(registry),
+		Adapter: native.NewAdapterWithRoundTripper(registry, common_http.NewProxyTransport(registry.VpcId,
+			registry.HttpProxy, registry.HttpsProxy, registry.NoProxy, registry.Insecure)),
 		registry: registry,
 		client:   newClient(registry),
 	}, nil
