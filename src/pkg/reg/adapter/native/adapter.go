@@ -81,9 +81,13 @@ func NewAdapter(reg *model.Registry) *Adapter {
 
 // NewAdapterWithAuthorizer returns an instance of the Adapter with provided authorizer
 func NewAdapterWithAuthorizer(reg *model.Registry, authorizer lib.Authorizer) *Adapter {
+	var opts []registry.ClientOpt
+	if reg.WithHeaders != nil {
+		opts = append(opts, registry.WithHeades(reg.WithHeaders))
+	}
 	return &Adapter{
 		registry: reg,
-		Client:   registry.NewClientWithAuthorizer(reg.URL, authorizer, reg.Insecure),
+		Client:   registry.NewClientWithAuthorizer(reg.URL, authorizer, reg.Insecure, opts...),
 	}
 }
 

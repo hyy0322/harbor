@@ -96,17 +96,18 @@ type Registry struct {
 	URL         string `json:"url"`
 	// TokenServiceURL is only used for local harbor instance to
 	// avoid the requests passing through the external proxy for now
-	TokenServiceURL string      `json:"token_service_url"`
-	Credential      *Credential `json:"credential"`
-	Insecure        bool        `json:"insecure"`
-	Status          string      `json:"status"`
-	CreationTime    time.Time   `json:"creation_time"`
-	UpdateTime      time.Time   `json:"update_time"`
-	VpcId           string      `json:"vpc_id"`
-	HttpProxy       string      `json:"http_proxy"`
-	HttpsProxy      string      `json:"https_proxy"`
-	NoProxy         string      `json:"no_proxy"`
-	SkipVerify      bool        `json:"skip_verify"`
+	TokenServiceURL string            `json:"token_service_url"`
+	Credential      *Credential       `json:"credential"`
+	Insecure        bool              `json:"insecure"`
+	Status          string            `json:"status"`
+	CreationTime    time.Time         `json:"creation_time"`
+	UpdateTime      time.Time         `json:"update_time"`
+	VpcId           string            `json:"vpc_id"`
+	HttpProxy       string            `json:"http_proxy"`
+	HttpsProxy      string            `json:"https_proxy"`
+	NoProxy         string            `json:"no_proxy"`
+	SkipVerify      bool              `json:"skip_verify"`
+	WithHeaders     map[string]string `json:"-"`
 }
 
 // FilterStyle ...

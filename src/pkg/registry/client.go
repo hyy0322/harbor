@@ -64,6 +64,13 @@ const (
 	UserAgent = "harbor-registry-client"
 )
 
+// ClientOpt used to init client
+type ClientOpts struct {
+	WithHeaders map[string]string
+}
+
+type ClientOpt func(opts *ClientOpts) *ClientOpts
+
 // Client defines the methods that a registry client should implements
 type Client interface {
 	// Ping the base API endpoint "/v2/"
@@ -112,15 +119,30 @@ func NewClient(url, username, password string, insecure bool) Client {
 	}
 }
 
+func WithHeades(headers map[string]string) ClientOpt {
+	return func(opts *ClientOpts) *ClientOpts {
+		opts.WithHeaders = headers
+		return opts
+	}
+}
+
 // NewClientWithAuthorizer creates a registry client with the provided authorizer
-func NewClientWithAuthorizer(url string, authorizer lib.Authorizer, insecure bool) Client {
-	return &client{
+func NewClientWithAuthorizer(url string, authorizer lib.Authorizer, insecure bool, opts ...ClientOpt) Client {
+	clientOpts := &ClientOpts{}
+	for _, opt := range opts {
+		clientOpts = opt(clientOpts)
+	}
+	cli := &client{
 		url:        url,
 		authorizer: authorizer,
 		client: &http.Client{
 			Transport: commonhttp.GetHTTPTransport(commonhttp.WithInsecure(insecure)),
 		},
 	}
+	if clientOpts.WithHeaders != nil {
+		cli.withHeaders = clientOpts.WithHeaders
+	}
+	return cli
 }
 
 // NewClientWithTransport new client with customized transport, the specific transport will also be used in authorizer
@@ -170,15 +192,19 @@ func NewClientWithAuthorizerWithTransport(url string, authorizer lib.Authorizer,
 }
 
 type client struct {
-	url        string
-	authorizer lib.Authorizer
-	client     *http.Client
+	url         string
+	withHeaders map[string]string
+	authorizer  lib.Authorizer
+	client      *http.Client
 }
 
 func (c *client) Ping() error {
 	req, err := http.NewRequest(http.MethodGet, buildPingURL(c.url), nil)
 	if err != nil {
 		return err
+	}
+	for k, v := range c.withHeaders {
+		req.Header.Set(k, v)
 	}
 	resp, err := c.do(req)
 	if err != nil {
@@ -215,6 +241,9 @@ func (c *client) catalog(url string) ([]string, string, error) {
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return nil, "", err
+	}
+	for k, v := range c.withHeaders {
+		req.Header.Set(k, v)
 	}
 	resp, err := c.do(req)
 	if err != nil {
@@ -263,6 +292,9 @@ func (c *client) listTags(url string) ([]string, string, error) {
 	if err != nil {
 		return nil, "", err
 	}
+	for k, v := range c.withHeaders {
+		req.Header.Set(k, v)
+	}
 	resp, err := c.do(req)
 	if err != nil {
 		return nil, "", err
@@ -287,6 +319,9 @@ func (c *client) ManifestExist(repository, reference string) (bool, *distributio
 	if err != nil {
 		return false, nil, err
 	}
+	for k, v := range c.withHeaders {
+		req.Header.Set(k, v)
+	}
 	for _, mediaType := range accepts {
 		req.Header.Add(http.CanonicalHeaderKey("Accept"), mediaType)
 	}
@@ -310,6 +345,9 @@ func (c *client) PullManifest(repository, reference string, acceptedMediaTypes .
 	req, err := http.NewRequest(http.MethodGet, buildManifestURL(c.url, repository, reference), nil)
 	if err != nil {
 		return nil, "", err
+	}
+	for k, v := range c.withHeaders {
+		req.Header.Set(k, v)
 	}
 	if len(acceptedMediaTypes) == 0 {
 		acceptedMediaTypes = accepts
@@ -341,6 +379,9 @@ func (c *client) PushManifest(repository, reference, mediaType string, payload [
 	if err != nil {
 		return "", err
 	}
+	for k, v := range c.withHeaders {
+		req.Header.Set(k, v)
+	}
 	req.Header.Set(http.CanonicalHeaderKey("Content-Type"), mediaType)
 	resp, err := c.do(req)
 	if err != nil {
@@ -368,6 +409,9 @@ func (c *client) DeleteManifest(repository, reference string) error {
 	if err != nil {
 		return err
 	}
+	for k, v := range c.withHeaders {
+		req.Header.Set(k, v)
+	}
 	resp, err := c.do(req)
 	if err != nil {
 		return err
@@ -380,6 +424,9 @@ func (c *client) BlobExist(repository, digest string) (bool, error) {
 	req, err := http.NewRequest(http.MethodHead, buildBlobURL(c.url, repository, digest), nil)
 	if err != nil {
 		return false, err
+	}
+	for k, v := range c.withHeaders {
+		req.Header.Set(k, v)
 	}
 	resp, err := c.do(req)
 	if err != nil {
@@ -396,6 +443,9 @@ func (c *client) PullBlob(repository, digest string) (int64, io.ReadCloser, erro
 	req, err := http.NewRequest(http.MethodGet, buildBlobURL(c.url, repository, digest), nil)
 	if err != nil {
 		return 0, nil, err
+	}
+	for k, v := range c.withHeaders {
+		req.Header.Set(k, v)
 	}
 
 	req.Header.Add(http.CanonicalHeaderKey("Accept-Encoding"), "identity")
@@ -431,6 +481,9 @@ func (c *client) initiateBlobUpload(repository string) (string, string, error) {
 	if err != nil {
 		return "", "", err
 	}
+	for k, v := range c.withHeaders {
+		req.Header.Set(k, v)
+	}
 	req.Header.Set(http.CanonicalHeaderKey("Content-Length"), "0")
 	resp, err := c.do(req)
 	if err != nil {
@@ -450,6 +503,9 @@ func (c *client) monolithicBlobUpload(location, digest string, size int64, data 
 	if err != nil {
 		return err
 	}
+	for k, v := range c.withHeaders {
+		req.Header.Set(k, v)
+	}
 	req.ContentLength = size
 	resp, err := c.do(req)
 	if err != nil {
@@ -464,6 +520,9 @@ func (c *client) MountBlob(srcRepository, digest, dstRepository string) error {
 	if err != nil {
 		return err
 	}
+	for k, v := range c.withHeaders {
+		req.Header.Set(k, v)
+	}
 	req.Header.Set(http.CanonicalHeaderKey("Content-Length"), "0")
 	resp, err := c.do(req)
 	if err != nil {
@@ -477,6 +536,9 @@ func (c *client) DeleteBlob(repository, digest string) error {
 	req, err := http.NewRequest(http.MethodDelete, buildBlobURL(c.url, repository, digest), nil)
 	if err != nil {
 		return err
+	}
+	for k, v := range c.withHeaders {
+		req.Header.Set(k, v)
 	}
 	resp, err := c.do(req)
 	if err != nil {
