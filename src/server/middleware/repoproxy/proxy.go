@@ -49,6 +49,7 @@ const (
 	ensureTagMaxRetry   = 60
 
 	httpHeaderTrafficFromSource = "X-Volc-Cr-Traffic-From-Source"
+	httpHeaderMigrate           = "X-Volc-Cr-Migrate"
 )
 
 // BlobGetMiddleware handle get blob request
@@ -66,7 +67,7 @@ func handleBlob(w http.ResponseWriter, r *http.Request, next http.Handler) error
 	if err != nil {
 		return err
 	}
-	if !canProxy(r.Context(), p) || proxyCtl.UseLocalBlob(ctx, art) {
+	if !canProxy(r.Context(), p) || proxyCtl.UseLocalBlob(ctx, art) || isMigrateRequest(r) {
 		next.ServeHTTP(w, r)
 		return nil
 	}
@@ -161,7 +162,7 @@ func handleManifest(w http.ResponseWriter, r *http.Request, next http.Handler) e
 		return err
 	}
 	// 如果是ProxySession，是为了确认harbor中是否存在该manifest，因此直接fallback to local
-	if !canProxy(r.Context(), p) || isProxySession(ctx) {
+	if !canProxy(r.Context(), p) || isProxySession(ctx) || isMigrateRequest(r) {
 		next.ServeHTTP(w, r)
 		return nil
 	}
@@ -267,6 +268,11 @@ func isProxySession(ctx context.Context) bool {
 	return false
 }
 
+// isMigrateRequest check if current request is migrate request
+func isMigrateRequest(r *http.Request) bool {
+	return r.Header.Get(httpHeaderMigrate) == "true"
+}
+
 // DisableBlobAndManifestUploadMiddleware disable push artifact to a proxy project with a non-proxy session
 func DisableBlobAndManifestUploadMiddleware() func(http.Handler) http.Handler {
 	return middleware.New(func(w http.ResponseWriter, r *http.Request, next http.Handler) {
@@ -277,7 +283,7 @@ func DisableBlobAndManifestUploadMiddleware() func(http.Handler) http.Handler {
 			httpLib.SendError(w, err)
 			return
 		}
-		if p.IsProxy() && !isProxySession(ctx) {
+		if p.IsProxy() && !isProxySession(ctx) && !isMigrateRequest(r) {
 			httpLib.SendError(w,
 				errors.DeniedError(
 					errors.Errorf("can not push artifact to a proxy project: %v", p.Name)))
