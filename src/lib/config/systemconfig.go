@@ -36,6 +36,7 @@ import (
 	"github.com/goharbor/harbor/src/common/secret"
 	"github.com/goharbor/harbor/src/lib/encrypt"
 	"github.com/goharbor/harbor/src/lib/log"
+	"gopkg.in/yaml.v2"
 	"os"
 	"strconv"
 	"strings"
@@ -228,6 +229,16 @@ func InternalNotaryEndpoint() string {
 // TrivyAdapterURL returns the endpoint URL of a Trivy adapter instance, by default it's the one deployed within Harbor.
 func TrivyAdapterURL() string {
 	return DefaultMgr().Get(backgroundCtx, common.TrivyAdapterURL).GetString()
+}
+
+// RegistrySecret returns the secret for registry
+func RegistrySecret() string {
+	httpSecret := os.Getenv("REGISTRY_SECRET")
+	err := yaml.Unmarshal([]byte(httpSecret), &httpSecret)
+	if err != nil {
+		log.Errorf("failed to load secret, error %v", err)
+	}
+	return httpSecret
 }
 
 // Metric returns the overall metric settings

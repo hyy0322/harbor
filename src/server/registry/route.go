@@ -110,7 +110,7 @@ func RegisterRoutes() {
 		Method(http.MethodPatch).
 		Path("/*/blobs/uploads/:session_id").
 		Middleware(metric.InjectOpIDMiddleware(metric.BlobsUploadOperationID)).
-		Middleware(blob.PatchBlobUploadMiddleware()).
+		//Middleware(blob.PatchBlobUploadMiddleware()).
 		Handler(proxy)
 	root.NewRoute().
 		Method(http.MethodPut).

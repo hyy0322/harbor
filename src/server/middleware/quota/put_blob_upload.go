@@ -19,9 +19,10 @@ import (
 	"strconv"
 
 	"github.com/goharbor/harbor/src/controller/blob"
+	"github.com/goharbor/harbor/src/lib/config"
 	"github.com/goharbor/harbor/src/lib/log"
-	"github.com/goharbor/harbor/src/pkg/distribution"
 	"github.com/goharbor/harbor/src/pkg/quota/types"
+	"github.com/goharbor/harbor/src/server/middleware/util"
 )
 
 // PutBlobUploadMiddleware middleware to request storage resource for the project
@@ -39,7 +40,13 @@ func putBlobUploadResources(r *http.Request, reference, referenceID string) (typ
 
 	size, err := strconv.ParseInt(r.Header.Get("Content-Length"), 10, 64)
 	if err != nil || size == 0 {
-		size, err = blobController.GetAcceptedBlobSize(distribution.ParseSessionID(r.URL.Path))
+		state, unpackErr := util.UnpackUploadState(config.RegistrySecret(), r.FormValue("_state"))
+		if unpackErr != nil {
+			logger.Warningf("unpack state failed, error: %v", unpackErr)
+		} else {
+			size = state.Offset
+			err = nil
+		}
 	}
 	if err != nil {
 		logger.Errorf("get blob size failed, error: %v", err)

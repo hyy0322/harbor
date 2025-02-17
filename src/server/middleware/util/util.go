@@ -15,18 +15,23 @@
 package util
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
-	"github.com/goharbor/harbor/src/common/rbac/project"
-	"github.com/goharbor/harbor/src/lib/q"
-	"github.com/goharbor/harbor/src/pkg/accessory"
-	"github.com/goharbor/harbor/src/pkg/accessory/model"
 	"net/http"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/goharbor/harbor/src/common/api"
 	"github.com/goharbor/harbor/src/common/rbac"
+	"github.com/goharbor/harbor/src/common/rbac/project"
 	"github.com/goharbor/harbor/src/common/security"
+	"github.com/goharbor/harbor/src/lib/q"
+	"github.com/goharbor/harbor/src/pkg/accessory"
+	"github.com/goharbor/harbor/src/pkg/accessory/model"
 	"github.com/goharbor/harbor/src/pkg/distribution"
 )
 
@@ -82,4 +87,52 @@ func SkipPolicyChecking(r *http.Request, projectID, artID int64) (bool, error) {
 	}
 
 	return false, nil
+}
+
+var errInvalidSecret = fmt.Errorf("invalid secret")
+
+// UnpackUploadState unpacks and validates the blob upload state from the
+// token, using the hmacKey secret.
+// 如果不挂载secret，因为mac长度就是32，所以只需要获取32:后面的数据即可，不做数据校验
+func UnpackUploadState(secret string, token string) (blobUploadState, error) {
+	var state blobUploadState
+
+	tokenBytes, err := base64.URLEncoding.DecodeString(token)
+	if err != nil {
+		return state, err
+	}
+	mac := hmac.New(sha256.New, []byte(secret))
+
+	if len(tokenBytes) < mac.Size() {
+		return state, fmt.Errorf("token too short: %d,%d", len(tokenBytes), mac.Size())
+	}
+
+	macBytes := tokenBytes[:mac.Size()]
+	messageBytes := tokenBytes[mac.Size():]
+
+	mac.Write(messageBytes)
+	if !hmac.Equal(mac.Sum(nil), macBytes) {
+		return state, fmt.Errorf("token invalid: %x, %x", mac.Sum(nil), macBytes)
+	}
+
+	if err := json.Unmarshal(messageBytes, &state); err != nil {
+		return state, err
+	}
+
+	return state, nil
+}
+
+// blobUploadState captures the state serializable state of the blob upload.
+type blobUploadState struct {
+	// name is the primary repository under which the blob will be linked.
+	Name string
+
+	// UUID identifies the upload.
+	UUID string
+
+	// offset contains the current progress of the upload.
+	Offset int64
+
+	// StartedAt is the original start time of the upload.
+	StartedAt time.Time
 }
