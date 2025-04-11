@@ -6,8 +6,10 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
+	"code.byted.org/security/go-polaris/request"
 	"golang.org/x/net/http/httpproxy"
 )
 
@@ -25,6 +27,9 @@ type requestKey string
 var (
 	insecureTransport = withInsecure(newTransportForProxy())
 	secureTransport   = withSecure(newTransportForProxy())
+
+	insecureTransportNoProxy = withInsecure(newTransportNoProxy())
+	secureTransportNoProxy   = withSecure(newTransportNoProxy())
 )
 
 type proxyTransport struct {
@@ -47,8 +52,14 @@ func (p *proxyTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 
 // NewProxyTransport ...
 func NewProxyTransport(vpcId, httpProxy, httpsProxy, noProxy string, insecure bool) http.RoundTripper {
+	var underlayTransport http.RoundTripper
+	if httpProxy == "" && httpsProxy == "" {
+		underlayTransport = getTransportNoProxy(insecure)
+	} else {
+		underlayTransport = getTransportForProxy(insecure)
+	}
 	return &proxyTransport{
-		transport:  getTransportForProxy(insecure),
+		transport:  underlayTransport,
 		httpProxy:  httpProxy,
 		httpsProxy: httpsProxy,
 		noProxy:    noProxy,
@@ -61,6 +72,13 @@ func getTransportForProxy(insecure bool) *http.Transport {
 		return insecureTransport
 	}
 	return secureTransport
+}
+
+func getTransportNoProxy(insecure bool) *http.Transport {
+	if insecure {
+		return insecureTransportNoProxy
+	}
+	return secureTransportNoProxy
 }
 
 func newTransportForProxy() *http.Transport {
@@ -103,6 +121,44 @@ func newTransportForProxy() *http.Transport {
 		TLSClientConfig: &tls.Config{},
 		// 在最终模式下，会出现走相同的代理、相同目的IP，但是vpc不同的场景。keepalive模式下会复用相同proxy、目的地址的连接，导致转发到错误的vpc，所以需要关闭keepalive
 		DisableKeepAlives:     true,
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+	}
+}
+
+type Dialer struct {
+	request.Dialer
+	subDomainAllowList []string
+}
+
+func (d *Dialer) DialContext(ctx context.Context, network, addr string) (net.Conn, error) {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, subdomain := range d.subDomainAllowList {
+		if strings.HasSuffix(host, subdomain) {
+			return d.Dialer.UnderlyingDialer().DialContext(ctx, network, addr)
+		}
+	}
+
+	return d.Dialer.DialContext(ctx, network, addr)
+}
+
+func newTransportNoProxy() *http.Transport {
+	dailer := request.NewInsecureDialer()
+	dailer.Deny("100.96.0.96/32")
+	dailer.UnderlyingDialer().Timeout = 30 * time.Second
+	dailer.UnderlyingDialer().KeepAlive = 30 * time.Second
+	dailer.UnderlyingDialer().DualStack = true
+
+	return &http.Transport{
+		Proxy:                 http.ProxyFromEnvironment,
+		DialContext:           dailer.DialContext,
+		TLSClientConfig:       &tls.Config{},
 		MaxIdleConns:          100,
 		IdleConnTimeout:       90 * time.Second,
 		TLSHandshakeTimeout:   10 * time.Second,
