@@ -2,9 +2,10 @@ package v2token
 
 import (
 	"context"
-	rbac_project "github.com/goharbor/harbor/src/common/rbac/project"
 	"strconv"
 	"strings"
+
+	rbac_project "github.com/goharbor/harbor/src/common/rbac/project"
 
 	registry_token "github.com/docker/distribution/registry/auth/token"
 	"github.com/goharbor/harbor/src/common/rbac"
@@ -19,10 +20,11 @@ import (
 // The intention for this guy is only for support CLI push/pull.  It should not be used in other scenario without careful review
 // Each request should have a different instance of tokenSecurityCtx
 type tokenSecurityCtx struct {
-	logger    *log.Logger
-	name      string
-	accessMap map[string]map[types.Action]struct{}
-	ctl       project.Controller
+	logger        *log.Logger
+	name          string
+	accessMap     map[string]map[types.Action]struct{}
+	repoAccessMap map[string]map[types.Action]struct{}
+	ctl           project.Controller
 }
 
 func (t *tokenSecurityCtx) Name() string {
@@ -51,6 +53,14 @@ func (t *tokenSecurityCtx) GetMyProjects() ([]*models.Project, error) {
 
 func (t *tokenSecurityCtx) GetProjectRoles(projectIDOrName interface{}) []int {
 	return []int{}
+}
+
+func (t *tokenSecurityCtx) GetParameters() map[string]string {
+	return nil
+}
+
+func (t *tokenSecurityCtx) GetSecurityCtx() security.Context {
+	return nil
 }
 
 func (t *tokenSecurityCtx) Can(ctx context.Context, action types.Action, resource types.Resource) bool {
@@ -84,6 +94,7 @@ func (t *tokenSecurityCtx) Can(ctx context.Context, action types.Action, resourc
 func New(ctx context.Context, name string, access []*registry_token.ResourceActions) security.Context {
 	logger := log.G(ctx)
 	m := make(map[string]map[types.Action]struct{})
+	am := make(map[string]map[types.Action]struct{})
 	for _, ac := range access {
 		if ac.Type != "repository" {
 			logger.Debugf("dropped unsupported type '%s' in token", ac.Type)
@@ -111,14 +122,16 @@ func New(ctx context.Context, name string, access []*registry_token.ResourceActi
 				actionMap[rbac.ActionDelete] = struct{}{}
 			}
 		}
+		am[ac.Name] = actionMap
 		m[l[0]] = actionMap
 	}
 
 	return &tokenSecurityCtx{
-		logger:    logger,
-		name:      name,
-		accessMap: m,
-		ctl:       project.Ctl,
+		logger:        logger,
+		name:          name,
+		accessMap:     m,
+		repoAccessMap: am,
+		ctl:           project.Ctl,
 	}
 }
 
@@ -135,10 +148,15 @@ type extendedContext struct {
 type ExtendedContext interface {
 	security.Context
 	GetParameters() map[string]string
+	GetSecurityCtx() security.Context
 }
 
 func (c *extendedContext) GetParameters() map[string]string {
 	return c.parameters
+}
+
+func (c *extendedContext) GetSecurityCtx() security.Context {
+	return c.Context
 }
 
 func NewExtendedContext(ctx security.Context, parameters map[string]string) security.Context {
@@ -146,6 +164,29 @@ func NewExtendedContext(ctx security.Context, parameters map[string]string) secu
 		Context:    ctx,
 		parameters: parameters,
 	}
+}
+
+func RepoCan(ctx context.Context, name string, action rbac.Action) bool {
+	logger := log.G(ctx)
+	sc, ok := security.FromContext(ctx)
+	if !ok {
+		logger.Error("Failed to get security context")
+		return false
+	}
+	ec, ok := sc.(ExtendedContext)
+	if !ok {
+		return false
+	}
+	tc, ok := ec.GetSecurityCtx().(*tokenSecurityCtx)
+	if !ok {
+		return false
+	}
+	actions, ok := tc.repoAccessMap[name]
+	if !ok {
+		return false
+	}
+	_, hasAction := actions[action]
+	return hasAction
 }
 
 func GetTagLimit(ctx context.Context) int64 {
