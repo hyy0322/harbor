@@ -46,10 +46,12 @@ type reqChecker struct {
 
 func (rc *reqChecker) check(req *http.Request) (string, error) {
 	securityCtx, ok := security.FromContext(req.Context())
+	logger := log.G(req.Context())
 	if !ok {
 		return "", fmt.Errorf("the security context got from request is nil")
 	}
 	al := accessList(req)
+	logger.Info("al", al)
 	if len(al) == 0 {
 		return "", fmt.Errorf("un-recognized request: %s %s", req.Method, req.URL.Path)
 	}

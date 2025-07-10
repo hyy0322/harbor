@@ -54,6 +54,7 @@ func (t *tokenSecurityCtx) GetProjectRoles(projectIDOrName interface{}) []int {
 }
 
 func (t *tokenSecurityCtx) Can(ctx context.Context, action types.Action, resource types.Resource) bool {
+	t.logger.Info("can", action, resource)
 	if !strings.HasSuffix(resource.String(), rbac.ResourceRepository.String()) {
 		return false
 	}
@@ -72,10 +73,12 @@ func (t *tokenSecurityCtx) Can(ctx context.Context, action types.Action, resourc
 		t.logger.Warningf("Failed to get project, id: %d, error: %v", pid, err)
 		return false
 	}
+	t.logger.Info("accessMap", t.accessMap)
 	actions, ok := t.accessMap[p.Name]
 	if !ok {
 		return false
 	}
+	t.logger.Info("actions", actions)
 	_, hasAction := actions[action]
 	return hasAction
 }
