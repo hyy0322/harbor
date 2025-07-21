@@ -24,7 +24,6 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/goharbor/harbor/src/lib/config"
 
@@ -114,7 +113,6 @@ func NewClient(url, username, password string, insecure bool) Client {
 		authorizer: auth.NewAuthorizer(username, password, insecure),
 		client: &http.Client{
 			Transport: commonhttp.GetHTTPTransport(commonhttp.WithInsecure(insecure)),
-			Timeout:   30 * time.Minute,
 		},
 	}
 }
@@ -152,7 +150,6 @@ func NewClientWithTransport(url, username, password string, insecure bool, trans
 		authorizer: auth.NewAuthorizerWithTransport(username, password, insecure, transport),
 		client: &http.Client{
 			Transport: transport,
-			Timeout:   30 * time.Minute,
 		},
 	}
 }
@@ -164,7 +161,6 @@ func NewClientWithRoundTripper(url, username, password string, insecure bool, tr
 		authorizer: auth.NewAuthorizerWithRoundTripper(username, password, transport),
 		client: &http.Client{
 			Transport: transport,
-			Timeout:   30 * time.Minute,
 		},
 	}
 }
