@@ -23,6 +23,7 @@ import (
 	"sync"
 
 	"github.com/goharbor/harbor/src/common/rbac"
+	rbac_project "github.com/goharbor/harbor/src/common/rbac/project"
 	"github.com/goharbor/harbor/src/common/rbac/system"
 	"github.com/goharbor/harbor/src/common/security"
 	"github.com/goharbor/harbor/src/common/security/v2token"
@@ -66,8 +67,17 @@ func (rc *reqChecker) check(req *http.Request) (string, error) {
 			(req.Method == http.MethodHead || req.Method == http.MethodGet) { // make sure 401 is returned for CLI HEAD, see #11271
 			return getChallenge(req, al), fmt.Errorf("authorize header needed to send HEAD to repository")
 		} else if a.target == repository {
+			pn := strings.Split(a.name, "/")[0]
+			pid, err := rc.projectID(req.Context(), pn)
+			if err != nil {
+				return "", err
+			}
+			resource := rbac_project.NewNamespace(pid).Resource(rbac.ResourceRepository)
 			if !v2token.RepoCan(req.Context(), a.name, a.action) {
-				return getChallenge(req, al), fmt.Errorf("unauthorized to access repository: %s, action: %s", a.name, a.action)
+				// fallback to securityCtx
+				if !securityCtx.Can(req.Context(), a.action, resource) {
+					return getChallenge(req, al), fmt.Errorf("unauthorized to access repository: %s, action: %s", a.name, a.action)
+				}
 			}
 		}
 	}
