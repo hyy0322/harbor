@@ -78,6 +78,10 @@ func handleBlob(w http.ResponseWriter, r *http.Request, next http.Handler) error
 	defer reader.Close()
 	// Use io.CopyN to avoid out of memory when pulling big blob
 	setHeaders(w, size, "", art.Digest)
+	if size == 0 {
+		_, err = io.Copy(w, reader)
+		return err
+	}
 	written, err := io.CopyN(w, reader, size)
 	if err != nil {
 		return err
@@ -246,7 +250,9 @@ func canProxy(ctx context.Context, p *proModels.Project) bool {
 
 func setHeaders(w http.ResponseWriter, size int64, mediaType string, dig string) {
 	h := w.Header()
-	h.Set(contentLength, fmt.Sprintf("%v", size))
+	if size > 0 {
+		h.Set(contentLength, fmt.Sprintf("%v", size))
+	}
 	if len(mediaType) > 0 {
 		h.Set(contentType, mediaType)
 	}
