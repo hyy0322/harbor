@@ -1,4 +1,4 @@
-FROM hub.byted.org/infcplibrary/golang:1.17.10-security-auth as builder
+FROM hub.byted.org/infcplibrary/golang:1.20.14-bullseye-security as builder
 COPY . /harbor
 WORKDIR /harbor
 # set gitconfig for pulling access
@@ -8,7 +8,7 @@ ENV GIT_SSH_COMMAND $CODEBASE
 
 RUN CGO_ENABLED=0 make compile_registryctl_binary
 
-FROM hub.byted.org/infcplibrary/golang:1.17.10-security-auth as rbuilder
+FROM hub.byted.org/infcplibrary/golang:1.20.14-bullseye-security as rbuilder
 
 WORKDIR /registry
 COPY ./make/photon/registry/builder.new /registry/builder

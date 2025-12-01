@@ -73,6 +73,49 @@ var (
 		service too many times`,
 		HTTPStatusCode: http.StatusTooManyRequests,
 	})
+
+	// ErrorCodeBadRequest ...
+	ErrorCodeBadRequest = Register("errcode", ErrorDescriptor{
+		Value:          "BADREQUEST",
+		Message:        "bad request",
+		Description:    `Returned when a client sends a bad request`,
+		HTTPStatusCode: http.StatusBadRequest,
+	})
+	// ErrorCodeNotFound ...
+	ErrorCodeNotFound = Register("errcode", ErrorDescriptor{
+		Value:          "NOTFOUND",
+		Message:        "not found",
+		Description:    `Returned when a client requests a resource that does not exist`,
+		HTTPStatusCode: http.StatusNotFound,
+	})
+	// ErrorCodeRequestTimeout ...
+	ErrorCodeRequestTimeout = Register("errcode", ErrorDescriptor{
+		Value:          "REQUESTTIMEOUT",
+		Message:        "request timeout",
+		Description:    `Request timeout`,
+		HTTPStatusCode: http.StatusRequestTimeout,
+	})
+	// ErrorCodeConflict ...
+	ErrorCodeConflict = Register("errcode", ErrorDescriptor{
+		Value:          "CONFLICT",
+		Message:        "conflict",
+		Description:    `Conflict resource`,
+		HTTPStatusCode: http.StatusConflict,
+	})
+	// ErrorCodePrecondition ...
+	ErrorCodePrecondition = Register("errcode", ErrorDescriptor{
+		Value:          "PRECONDITION",
+		Message:        "precondition",
+		Description:    `Precondition failed`,
+		HTTPStatusCode: http.StatusPreconditionFailed,
+	})
+	// ErrorCodeInvalidRange ...
+	ErrorCodeInvalidRange = Register("errcode", ErrorDescriptor{
+		Value:          "INVALIDRANGE",
+		Message:        "invalid range",
+		Description:    `Invalid range`,
+		HTTPStatusCode: http.StatusRequestedRangeNotSatisfiable,
+	})
 )
 
 var nextCode = 1000

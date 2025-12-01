@@ -169,3 +169,91 @@ type Error struct {
 func (err Error) Error() string {
 	return fmt.Sprintf("%s: %s", err.DriverName, err.Enclosed)
 }
+
+// BadRequestError ...
+type BadRequestError struct {
+	Code       string
+	Message    string
+	DriverName string
+}
+
+func (err BadRequestError) Error() string {
+	return fmt.Sprintf("%s: bad request, code: %s, message: %s", err.DriverName, err.Code, err.Message)
+}
+
+// ForbiddenError ...
+type ForbiddenError struct {
+	Code       string
+	Message    string
+	DriverName string
+}
+
+func (err ForbiddenError) Error() string {
+	return fmt.Sprintf("%s: forbidden, code: %s, message: %s", err.DriverName, err.Code, err.Message)
+}
+
+// NotFoundError ...
+type NotFoundError struct {
+	Code       string
+	Message    string
+	DriverName string
+}
+
+func (err NotFoundError) Error() string {
+	return fmt.Sprintf("%s: not found, code: %s, message: %s", err.DriverName, err.Code, err.Message)
+}
+
+// RequestTimeoutError ...
+type RequestTimeoutError struct {
+	Code       string
+	Message    string
+	DriverName string
+}
+
+func (err RequestTimeoutError) Error() string {
+	return fmt.Sprintf("%s: request timeout, code: %s, message: %s", err.DriverName, err.Code, err.Message)
+}
+
+// ConflictError ...
+type ConflictError struct {
+	Code       string
+	Message    string
+	DriverName string
+}
+
+func (err ConflictError) Error() string {
+	return fmt.Sprintf("%s: conflict, code: %s, message: %s", err.DriverName, err.Code, err.Message)
+}
+
+// PreconditionError ...
+type PreconditionError struct {
+	Code       string
+	Message    string
+	DriverName string
+}
+
+func (err PreconditionError) Error() string {
+	return fmt.Sprintf("%s: precondition, code: %s, message: %s", err.DriverName, err.Code, err.Message)
+}
+
+// InvalidRangeError ...
+type InvalidRangeError struct {
+	Code       string
+	Message    string
+	DriverName string
+}
+
+func (err InvalidRangeError) Error() string {
+	return fmt.Sprintf("%s: invalid range, code: %s, message: %s", err.DriverName, err.Code, err.Message)
+}
+
+// TooManyRequestsError ...
+type TooManyRequestsError struct {
+	Code       string
+	Message    string
+	DriverName string
+}
+
+func (err TooManyRequestsError) Error() string {
+	return fmt.Sprintf("%s: too many requests, code: %s, message: %s", err.DriverName, err.Code, err.Message)
+}
