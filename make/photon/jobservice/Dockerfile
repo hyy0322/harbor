@@ -1,10 +1,25 @@
-ARG harbor_base_image_version
-ARG harbor_base_namespace
-FROM ${harbor_base_namespace}/harbor-jobservice-base:${harbor_base_image_version}
+FROM hub.byted.org/infcplibrary/golang:1.17.10-security-auth as builder
+COPY . /go/src/github.com/goharbor/harbor
+WORKDIR /go/src/github.com/goharbor/harbor
+
+# set gitconfig for pulling access
+COPY gitconfig /etc/gitconfig
+ARG CODEBASE
+ENV GIT_SSH_COMMAND $CODEBASE
+
+RUN make compile_jobservice_binary && cp ./make/photon/jobservice/harbor_jobservice /tmp
+
+FROM hub.byted.org/base/security.photon40:latest
+
+RUN tdnf install -y tzdata shadow >> /dev/null \
+    && tdnf clean all \
+    && groupadd -r -g 10000 harbor && useradd --no-log-init -r -m -g 10000 -u 10000 harbor \
+    && mkdir /harbor/
+RUN tdnf upgrade -y
 
 COPY ./make/photon/common/install_cert.sh /harbor/
 COPY ./make/photon/jobservice/entrypoint.sh /harbor/
-COPY ./make/photon/jobservice/harbor_jobservice /harbor/
+COPY --from=builder /tmp/harbor_jobservice /harbor/
 
 
 RUN chown -R harbor:harbor /etc/pki/tls/certs \

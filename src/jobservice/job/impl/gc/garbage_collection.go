@@ -409,9 +409,13 @@ func (gc *GarbageCollector) deletedArt(ctx job.Context) (map[string][]model.Arti
 	artMap := make(map[string][]model.ArtifactTrash)
 	// handle the optional ones, and the artifact controller will move them into trash.
 	if gc.deleteUntagged {
+		timeRG := q.Range{
+			Max: time.Now().Add(-time.Duration(gc.timeWindowHours) * time.Hour),
+		}
 		untaggedArts, err = gc.artCtl.List(ctx.SystemContext(), &q.Query{
 			Keywords: map[string]interface{}{
-				"Tags": "nil",
+				"Tags":      "nil",
+				"push_time": &timeRG,
 			},
 		}, nil)
 		if err != nil {
