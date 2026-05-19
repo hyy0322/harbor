@@ -24,9 +24,10 @@ import (
 	tracelib "github.com/goharbor/harbor/src/lib/trace"
 	"github.com/goharbor/harbor/src/registryctl/auth"
 	"github.com/goharbor/harbor/src/registryctl/config"
+	"github.com/goharbor/harbor/src/registryctl/middleware"
 )
 
-// NewHandlerChain returns a gorilla router which is wrapped by  authenticate handler
+// NewHandlerChain returns a gorilla router which is wrapped by authenticate handler
 // and logging handler
 func NewHandlerChain(conf config.Configuration) http.Handler {
 	h := newRouter(conf)
@@ -37,6 +38,7 @@ func NewHandlerChain(conf config.Configuration) http.Handler {
 		"/api/health": true,
 	}
 	h = newAuthHandler(auth.NewSecretHandler(secrets), h, insecureAPIs)
+	h = middleware.RequestID()(h)
 	h = gorilla_handlers.LoggingHandler(os.Stdout, h)
 	if tracelib.Enabled() {
 		h = tracelib.NewHandler(h, "serve-http")
@@ -60,7 +62,7 @@ func newAuthHandler(authenticator auth.AuthenticationHandler, handler http.Handl
 
 func (a *authHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if a.authenticator == nil {
-		log.Errorf("No authenticator found in registry controller.")
+		log.G(r.Context()).Errorf("No authenticator found in registry controller.")
 		http.Error(w, http.StatusText(http.StatusInternalServerError),
 			http.StatusInternalServerError)
 		return
@@ -75,7 +77,7 @@ func (a *authHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	err := a.authenticator.AuthorizeRequest(r)
 	if err != nil {
-		log.Errorf("failed to authenticate request: %v", err)
+		log.G(r.Context()).Errorf("failed to authenticate request: %v", err)
 		http.Error(w, http.StatusText(http.StatusUnauthorized),
 			http.StatusUnauthorized)
 		return

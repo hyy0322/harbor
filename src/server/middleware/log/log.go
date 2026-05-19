@@ -24,7 +24,11 @@ import (
 // Middleware middleware which add logger to context
 func Middleware() func(http.Handler) http.Handler {
 	return middleware.New(func(w http.ResponseWriter, r *http.Request, next http.Handler) {
-		rid := r.Header.Get("X-Request-ID")
+		// Try to get request ID from headers, prioritizing X-TT-LOGID
+		rid := r.Header.Get("X-TT-LOGID")
+		if rid == "" {
+			rid = r.Header.Get("X-Request-ID")
+		}
 		if rid != "" {
 			logger := log.G(r.Context())
 			logger.Debugf("attach request id %s to the logger for the request %s %s", rid, r.Method, r.URL.Path)

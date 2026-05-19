@@ -28,15 +28,23 @@ import (
 // HeaderXRequestID X-Request-ID header
 const HeaderXRequestID = "X-Request-ID"
 
-// Middleware middleware which add X-Request-ID header in the http request when not exist
+// HeaderXTtLogID X-TT-LOGID header
+const HeaderXTtLogID = "X-TT-LOGID"
+
+// Middleware middleware which add X-Request-ID and X-TT-LOGID headers in the http request when not exist
 func Middleware(skippers ...middleware.Skipper) func(http.Handler) http.Handler {
 	return middleware.New(func(w http.ResponseWriter, r *http.Request, next http.Handler) {
-		rid := r.Header.Get(HeaderXRequestID)
+		rid := r.Header.Get(HeaderXTtLogID)
+		if rid == "" {
+			rid = r.Header.Get(HeaderXRequestID)
+		}
 		if rid == "" {
 			rid = uuid.New().String()
-			r.Header.Set(HeaderXRequestID, rid)
 		}
+		r.Header.Set(HeaderXRequestID, rid)
+		r.Header.Set(HeaderXTtLogID, rid)
 		w.Header().Set(HeaderXRequestID, rid)
+		w.Header().Set(HeaderXTtLogID, rid)
 		if tracelib.Enabled() {
 			oteltrace.SpanFromContext(r.Context()).SetAttributes(attribute.Key(HeaderXRequestID).String(rid))
 		}

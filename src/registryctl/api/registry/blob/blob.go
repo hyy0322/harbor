@@ -52,8 +52,8 @@ func (h *handler) delete(w http.ResponseWriter, r *http.Request) {
 	// don't parse the reference here as RemoveBlob does.
 	cleaner := storage.NewVacuum(ctx, h.storageDriver)
 	if err := cleaner.RemoveBlob(ref); err != nil {
-		tracelib.RecordError(span, err, "failed to remove blob")
-		log.Infof("failed to remove blob: %s, with error:%v", ref, err)
+			tracelib.RecordError(span, err, "failed to remove blob")
+			log.G(ctx).Infof("failed to remove blob: %s, with error:%v", ref, err)
 		api.HandleError(w, err)
 		return
 	}
